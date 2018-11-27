@@ -3,8 +3,36 @@ title: "R Notebook"
 output: html_notebook
 ---
  
-
+Load libraries
 ```{r}
-
+library(tidyverse)
+library(caret)
+library(rpart)
+library(knitr) #Dynamic Report Generator including use of LateX, HTML
 ```
+
+Import the data
+```{r}
+hr_data <- HR_Employee_Attrition_data
+str(hr_data)
+```
+Looking at the dataset, there are too many variables and we might not need all. For example. We will exclude "Over 18", "Employee Count", "Standard Hours". Those variables are not informative and there is not variance in these variables 
+```{r}
+hr_data = hr_data[,!(names(hr_data) %in% c('Over 18','Employee Count','Standard Hours','Employee ID'))]
+str(hr_data)
+```
+Proceeding for Data Visualizing and Feature Extraction . Visualizing the different features will help to determine the features that might be important for our prediction. 
+
+Checking the attirition percentage of the IBM organisation
+```{r}
+hr_data$Attrition <- hr_data$`Attrition (Yes/No)`
+(prop.table(table(hr_data$Attrition))*100)
+ggplot(hr_data, aes(Attrition)) + geom_bar()
+```
+In 1470 obervations of 31 variables, we see that about 84% of the population stayed at the organization and about 16% of the population left
+
+
+
+
+
 
