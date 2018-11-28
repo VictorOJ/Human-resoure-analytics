@@ -10,11 +10,12 @@ library(caret)
 library(rpart)
 library(knitr) #Dynamic Report Generator including use of LateX, HTML
 library(gridExtra)
+library(corrplot)
 ```
 
 Import the data
 ```{r}
-hr_data <- HR_Employee_Attrition_data
+hr_data <- hr_data_raw <- HR_Employee_Attrition_data
 str(hr_data)
 ```
 Looking at the dataset, there are too many variables and we might not need all. For example. We will exclude "Over 18", "Employee Count", "Standard Hours". Those variables are not informative and there is not variance in these variables 
@@ -159,9 +160,38 @@ hr_data$MonthlyIncome <- hr_data$`Monthly Income (USD)`
   
 ```
 The pay rates doesnt give much information on the attriton rate. There is no much significant mean difference in the totalrate as well.
-#Other than the daily rate, attrition is present for those with lower rate and montly income
+#Other than the daily rate, attrition is present for those with lower rate and monthly income
 
 #Monthly income and Job roles 
+Sales representatives employees tend to leave the organization most. We want to visualize the relationship between the monthly income and the job roles(Which Job is least paying?)
+
+```{r}
+ggplot(hr_data, aes(JobRole,MonthlyIncome, fill= Attrition)) + geom_boxplot() + 
+  coord_flip()
+  
+```
+we can see that Sales Representatives, Research Scientists and Labouratory Technicians are the lower job levels based on monthly income. The mean of those who leave is less than those who do not. 
+
+
+##Correlation analysis 
+Visualizing the correlation between numerical variables, and checking for colinearity.
+
+```{r}
+str(hr_data)
+hr_data$Numcompworked <- hr_data$`No. of Companies Worked`
+hr_data$Yearsatcompany <- hr_data$`Years At Company`
+hr_data$Yearsincurrentrole <- hr_data$`Years In Current Role`
+hr_data$Yearswithcurrmanager <- hr_data$`Years With Curr Manager`
+hr_data$Yearssincelastpromotion <- hr_data$`Years Since Last Promotion`
+hr_data$totalworkingyears <- hr_data$`Total Working Years`
+hr_data$trainingtimeslastyear <- hr_data$`Training Times Last Year`
+hr_data$stockoptionlevel <- hr_data$`Stock Option Level`
+hr_data$salaryhike <- hr_data$`Salary Hike (%)`
+data_corr = hr_data %>% 
+  dplyr::select(Age,DailyRate,DistancefromHome,HourlyRate,MonthlyIncome,MonthlyRate, Numcompworked,salaryhike,Yearsatcompany,Yearsincurrentrole,Yearssincelastpromotion,Yearswithcurrmanager,totalworkingyears,trainingtimeslastyear,stockoptionlevel)
+
+corrplot(cor(data_corr), method = "square", type="upper")
+```
 
 
 ##Attrition and Salary Hike
