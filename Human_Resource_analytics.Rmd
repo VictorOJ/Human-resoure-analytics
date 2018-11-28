@@ -9,6 +9,7 @@ library(tidyverse)
 library(caret)
 library(rpart)
 library(knitr) #Dynamic Report Generator including use of LateX, HTML
+library(gridExtra)
 ```
 
 Import the data
@@ -32,7 +33,168 @@ ggplot(hr_data, aes(Attrition)) + geom_bar()
 In 1470 obervations of 31 variables, we see that about 84% of the population stayed at the organization and about 16% of the population left
 
 
+#Deparment and Attrition
+Visualizing the Department of the employee ad the Relationship to attrition
+
+```{r}
+table(hr_data$Department)
+ggplot(hr_data, aes(Attrition, fill = Department)) + geom_bar()
+# Most of the employees are from the Research and Development department
+
+```
+```{r}
+Dep_att <- hr_data %>%group_by(Department)%>%summarize(attrition_rate=mean(Attrition=="Yes"))%>% ggplot(aes(x=Department,y=attrition_rate,fill=Department)) + geom_bar(stat='identity', alpha = 0.5) 
+
+
+Dep_att
+
+```
+```{r}
+ggplot(hr_data, aes(Attrition, group=Department)) +
+  geom_bar(aes(y = ..prop.., fill= factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_grid(~Department) 
+```
+
+It is evident that from the visualized bar chart that Sales has a higher attriton rate.
+
+
+#Marital status and Attrition
+
+
+```{r}
+hr_data$MaritalStatus <- hr_data$`Marital Status`
+mar_status <-hr_data %>% group_by(MaritalStatus)%>%
+  summarize(attrition_rate=mean(Attrition=="Yes"))%>%
+  ggplot(aes(x=MaritalStatus,y=attrition_rate,group=2)) + geom_line(stat='identity') +geom_point()
+
+mar_status
+```
+Attrition rate was far more for people who were single than married. Large people as compared to single persons might not necessarily leave the company. The marital status might be a weak predictor of attrition in this case. 
+
+
+## Attrition and Business Travel
+```{r}
+hr_data$BusinessTravel <- hr_data$`Business Travel`
+ggplot(hr_data, aes(BusinessTravel, fill = Attrition)) + geom_bar(stat= "count", position =  position_dodge()) 
+```
+We observe that there are more people in the organization who travels rarely as compared to those who travel frequently. It also appears that those who travel rarely might have a likelihood of staying in the organization, however the Business Travel Variable does not appear to be a significant predictor of attrition rate. 
+
+
+##Attrition and Gender
+```{r}
+ggplot(hr_data, aes(Gender, group= Attrition)) +
+  geom_bar(aes(y = ..prop.., fill= factor(..x..)), stat = "count") +
+  labs(y="Percentage", fill = "Gender") +
+  facet_grid(~Attrition)
+```
 
 
 
+The data visualization shows that there are more males than females in this organization. Also it appears that the rate of female attrition is higher than females who do not.
 
+
+##Attrition and Age
+
+```{r}
+ggplot(hr_data, aes(Age, fill = Gender)) + 
+  geom_histogram(binwidth = 5) +
+  facet_grid(~Attrition)
+``` 
+It is seen from the data visualization that the median age of the organization between 30-40 years. Also 
+a the people who leave the organization are between 30-40 years old, likewise a significant number of people who doesnt leave the organization.
+
+#We will do a feature extraction of the age seperating the older people from the younger people.
+
+
+## Job Role and Attrition
+We know that work and stress levels might make an employee leave an organization, and that might depend on the job role. We want to visualize the job role and attrition to know the relationship between job roles and attrition. 
+
+```{r}
+hr_data$JobRole <- hr_data$`Job Role`
+job_att <-hr_data %>%
+  group_by(JobRole)%>%
+  summarize(attrition_rate=mean(Attrition=="Yes"))%>%
+  ggplot(aes(x=JobRole,y=attrition_rate)) + geom_bar(stat='identity',alpha=0.5,fill="purple") +
+  coord_flip()
+
+job_att
+```
+We see that the sales representatives have more attrition rate than any other department. The Stress level of the sales representative might make it a more likely factor of an employee leaving the organization.  It also seems that the managers and leaders have a lower attrition rate. 
+
+# We will extract features of Mangers and staff of the company
+
+
+##Attrition and Distance from Home
+The likelihood that an employee will leave an organization might likely depend on the distance to the office. If the distance is too far, the employee might be looking to leave. We wil visuaize the relationship between distance to home and attrition
+
+```{r}
+hr_data$DistancefromHome <- hr_data$`Distance From Home (kms)`
+ggplot(hr_data,aes(DistancefromHome,fill=Attrition)) +
+  geom_density(alpha=0.5) 
+  
+```
+There doesnt a great deal in people staying far away from the office. There are a number of people staying closer to the office, the attrition rate are quite lower for those who stay within 10km away from the office. For those who stay farther away from the office, the attriton rate is quite higher. 
+
+
+##Attrition and Payrates
+Visualzing the relationship between attrition and the different payrates using a boxplot. 
+```{r}
+hr_data$DailyRate <- hr_data$`Daily Rate (USD)`
+hr_data$HourlyRate <- hr_data$`Hourly Rate (USD)`
+hr_data$MonthlyRate <- hr_data$`Monthly Rate (USD)`
+hr_data$MonthlyIncome <- hr_data$`Monthly Income (USD)`
+  dr <- ggplot(hr_data,aes(Attrition,DailyRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+  hr <- ggplot(hr_data,aes(Attrition,HourlyRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+  mr <- ggplot(hr_data,aes(Attrition,MonthlyRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+  mi <- ggplot(hr_data,aes(Attrition,MonthlyIncome, fill = Attrition)) + geom_boxplot() + coord_flip()
+
+  #feature extraction of rates
+  hr_data$totalRate <- hr_data$DailyRate + hr_data$HourlyRate + hr_data$MonthlyRate
+
+  tr  <- ggplot(hr_data,aes(Attrition,totalRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+  
+  grid.arrange(dr,hr,mr,mi,tr,nrow = 5)
+
+  
+```
+The pay rates doesnt give much information on the attriton rate. There is no much significant mean difference in the totalrate as well.
+#Other than the daily rate, attrition is present for those with lower rate and montly income
+
+#Monthly income and Job roles 
+
+
+##Attrition and Salary Hike
+#Job role
+### Years at company  * Montly Income
+#Years of Experience
+
+##Attrition and Education
+
+##Correlational analysis
+#Years in current role
+#Years since last promotion
+#Number of companies worked
+#Years of experience * Monthly Income
+#Stock Option
+
+
+##Attrition and categorical variables.
+
+#Attrition and JOb Satisfaction * Years with current manager
+
+
+
+# Attrition and Job Involvment(Job roles)
+
+#Attrition and Performance rating
+
+#Attrition and Relationship satisfaction
+
+#Attrition and Worklife balance
+
+#Attrition and Environment Satisfaction
+
+#Attrition and Overtime
+
+#Attrition and Total Satisfaction
