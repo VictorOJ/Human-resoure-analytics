@@ -64,7 +64,7 @@ It is evident that from the visualized bar chart that Sales has a higher attrito
 
 
 ```{r}
-hr_data$MaritalStatus <- hr_data$`Marital Status`
+hr_data$MaritalStatus = hr_data$`Marital Status`
 mar_status <-hr_data %>% group_by(MaritalStatus)%>%
   summarize(attrition_rate=mean(Attrition=="Yes"))%>%
   ggplot(aes(x=MaritalStatus,y=attrition_rate,group=2)) + geom_line(stat='identity') +geom_point()
@@ -193,38 +193,224 @@ data_corr = hr_data %>%
 corrplot(cor(data_corr), method = "square", type="upper")
 ```
 
+after observing the correlation plot, we observe that there are a number of highly correlated predictors. we observe that the number of highly correlated features are:
+Age and monthly income and total working years
+MOnthly income and total working years
+Years at compaany, years in current role
+years with current manager and total working years
+Job level and monthly income. 
+# because of colinearity, we should exclude monthly income, total working years, Years with current manager
+
 
 ##Attrition and Salary Hike
-#Job role
-### Years at company  * Montly Income
-#Years of Experience
+
+Visualizing salary hike and attrition
+```{r}
+ggplot(hr_data,aes(salaryhike, fill = Attrition)) + geom_histogram(binwidth =  5) 
+#Salary Hike and Years at company
+ggplot(hr_data,aes(Yearsatcompany,salaryhike,colour = salaryhike)) +geom_point(alpha = 0.5)
+
+
+#Salary Hike and Years at experience
+ggplot(hr_data,aes(totalworkingyears,salaryhike,col=(Attrition),colour = salaryhike,)) +geom_point(alpha = 0.5)
+
+```
+From the data visualization, we can see that there is no linear relationship between totalworkingyears 
 
 ##Attrition and Education
-
-##Correlational analysis
-#Years in current role
-#Years since last promotion
-#Number of companies worked
-#Years of experience * Monthly Income
-#Stock Option
+Visualizing attrition rate and education levels and fields
+```{r}
+hr_data$educationfield <- hr_data$`Education Field`
+ggplot(hr_data,aes(Education, fill = Attrition)) +geom_bar() + facet_grid(~educationfield) 
+```
+EMployees mith a life sciences and medical education level seems more populated in the organization. There also seems more people with a bachelor degree in the organization. However educational background might not be related to attrition levels
 
 
 ##Attrition and categorical variables.
 
+
+
 #Attrition and JOb Satisfaction * Years with current manager
+```{r}
+hr_data$jobsatisfaction <- hr_data$`Job Satisfaction`
+hr_data$jobinvolvement <- hr_data$`Job Involvement`
+hr_data$relationshipsatisfaction <- hr_data$`Relationship Satisfaction`
+hr_data$worklifebalance <- hr_data$`Work Life Balance`
+hr_data$environmentsatisfaction <- hr_data$`Environment Satisfaction`
+hr_data$overtime <- hr_data$`Over Time`
+hr_data$performancerating <- hr_data$`Performance Rating`
+
+ggplot(hr_data,aes(x=jobsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=jobinvolvement,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=relationshipsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..)),position = position_dodge()) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=performancerating,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=environmentsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=overtime,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=worklifebalance,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+```
+We observe that people with low job satisfaction have higher attrition rate. Also it appears that people with high job satisfication tend to leave the company, however in people who do not leave. those who have very high job satisfaction then to stay.
+
+Employees with higher job involvement tend to leave more, however people with high job invovlemnt have also reported no attrition rate
+
+High relationship satisfaction have also reported staying as well as almost the same number of people have reported leaving
 
 
 
-# Attrition and Job Involvment(Job roles)
+## Feature extraction
+Feature engineering from the variables. 
+For age, we want to divide the age into 3 groups. 
 
-#Attrition and Performance rating
+```{r}
+hr_data$AgeGroup <- as.factor(ifelse(hr_data$Age <= 25, "Young", ifelse(hr_data$Age<=50, "Middle Age", "Adult")))
 
-#Attrition and Relationship satisfaction
+table(hr_data$AgeGroup,hr_data$Attrition)
 
-#Attrition and Worklife balance
+ggplot(hr_data,aes(x=Attrition,group=AgeGroup))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Agegroup") +
+  facet_wrap(~AgeGroup)
 
-#Attrition and Environment Satisfaction
+ggplot(hr_data,aes(x=AgeGroup,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+```
 
-#Attrition and Overtime
+We can conclude that majority of the employees in the organization are middle aged. Also young people below 25 years tend to leave more. 
 
-#Attrition and Total Satisfaction
+#Age group and work-life balance
+
+
+
+```{r}
+
+
+age_work <- hr_data%>%group_by(AgeGroup,worklifebalance)%>%summarize(attrition_rate=mean(Attrition=="Yes")) %>%
+ggplot(aes(x=AgeGroup,y=attrition_rate,fill=worklifebalance)) + geom_bar(stat="identity",position = position_dodge()) 
+age_work
+```
+
+Adult have the lowest attrition rate in percentage and it appears they have the the lowest reported bad work-life balance. Young people have the highest reported bad work-life environment. Probably that is why they leave more.
+##Total Satisfaction
+
+```{r}
+hr_data$jobclass <- hr_data$JobRole
+directors <- c( 'Sales Executive', 'Manager','Research Director','Manufacturing Director')
+staffs <- c('Research Scientist', 'Sales Representative', 'Laboratory Technician','Healthcare Representative','Human Resources')
+
+hr_data$jobclass[hr_data$jobclass %in% directors]  <- 'Directors'
+hr_data$jobclass[hr_data$jobclass %in% staffs]  <- 'Staff'
+
+table(hr_data$jobclass)
+
+ggplot(hr_data,aes(x=Attrition,group=jobclass))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Job Class") +
+  facet_wrap(~jobclass)
+
+
+```
+
+As expected the staff of the company tend to leave more than the directors of the organization.
+
+
+```{r}
+ggplot(hr_data, aes(jobclass, fill = jobinvolvement)) + geom_bar(stat= "count", position =  position_dodge()) + facet_wrap(~Attrition) 
+
+ggplot(hr_data,aes(x=jobinvolvement,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "JOb Involvement") +
+  facet_wrap(~jobclass)
+
+
+
+```
+
+The staffs have more job involvement than the directors. It appears that the with more job involvement, the employee is more likely to leave the organization. 
+
+```{r}
+
+ggplot(hr_data, aes(jobclass, fill = jobsatisfaction)) + geom_bar(stat= "count", position =  position_dodge()) + facet_wrap(~Attrition) 
+
+
+
+
+```
+It appears that the staffs are more satisfied with their jobs than the directors and the job satisfaction is not necessarily the factor that the staffs are leaving the organization. 
+
+## Data modeling
+
+#Divide the data into training and test dataset.
+trainIndex <- createDataPartition(hrdata$left, p = 0.7, list = FALSE, times = 1)
+trainData <- hrdata[trainIndex,]
+testData  <- hrdata[-trainIndex,]
+```{r}
+#Divide the data into training and test dataset.
+trainIndex <- createDataPartition(hr_data$Attrition, p = 0.7, list = FALSE, times = 1)
+trainData <- hr_data[trainIndex,]
+testData  <- hr_data[-trainIndex,]
+
+```
+
+Data Preprocessing
+Convert characters to factors and remove 
+```{r}
+hr_dataclean <- hr_data
+hr_dataclean = hr_dataclean[,!(names(hr_dataclean) %in% c('Marital Status','Job Role','Attrition (Yes/No)','Marital Status','Education Field','Business Travel','Job Involvement','Job Satisfaction','Job Level','Hourly Rate (USD)','Daily Rate (USD)','Monthly Rate (USD)','Monthly Income (USD)','Salary Hike (%)','Stock Option Level','Over Time','No. of Companies Worked','Total Working Years','Years At Company','Years In Current Role','Years Since Last Promotion','Years With Curr Manager','Environment Satisfaction','Training Times Last Year','Work Life Balance','Performance Rating','Relationship Satisfaction','Distance From Home (kms)'))]
+str(hr_dataclean)
+
+```
+```{r}
+hr_dataclean$Department <- as.factor(hr_dataclean$Department)
+hr_dataclean$Education <- as.factor(hr_dataclean$Education)
+hr_dataclean$Attrition <- as.factor(hr_dataclean$Attrition)
+hr_dataclean$MaritalStatus <- as.factor(hr_dataclean$MaritalStatus)
+hr_dataclean$BusinessTravel <- as.factor(hr_dataclean$BusinessTravel)
+hr_dataclean$JobRole <- as.factor(hr_dataclean$JobRole)
+hr_dataclean$educationfield <- as.factor(hr_dataclean$educationfield)
+hr_dataclean$jobsatisfaction <- as.factor(hr_dataclean$jobsatisfaction)
+hr_dataclean$jobinvolvement <- as.factor(hr_dataclean$jobinvolvement)
+
+
+
+
+
+
+
+
+
+```
+
+##Logistic regression model
+```{r}
+
+```
+
