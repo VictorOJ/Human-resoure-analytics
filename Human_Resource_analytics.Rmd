@@ -11,6 +11,10 @@ library(rpart)
 library(knitr) #Dynamic Report Generator including use of LateX, HTML
 library(gridExtra)
 library(corrplot)
+library(Boruta) #Feature selection
+library(randomForest) #Random forest
+library(ggRandomForests) #variable importance random forest
+library(DMwR) #BINARY CLASSIFICATION
 ```
 
 Import the data
@@ -212,7 +216,7 @@ ggplot(hr_data,aes(Yearsatcompany,salaryhike,colour = salaryhike)) +geom_point(a
 
 
 #Salary Hike and Years at experience
-ggplot(hr_data,aes(totalworkingyears,salaryhike,col=(Attrition),colour = salaryhike,)) +geom_point(alpha = 0.5)
+ggplot(hr_data,aes(totalworkingyears,salaryhike,col=(Attrition),colour = salaryhike))+ geom_point(alpha = 0.5)
 
 ```
 From the data visualization, we can see that there is no linear relationship between totalworkingyears 
@@ -317,9 +321,53 @@ age_work <- hr_data%>%group_by(AgeGroup,worklifebalance)%>%summarize(attrition_r
 ggplot(aes(x=AgeGroup,y=attrition_rate,fill=worklifebalance)) + geom_bar(stat="identity",position = position_dodge()) 
 age_work
 ```
+```{r}
+#Agegroup and monthly income by (department,job class)
+
+#
+```
 
 Adult have the lowest attrition rate in percentage and it appears they have the the lowest reported bad work-life balance. Young people have the highest reported bad work-life environment. Probably that is why they leave more.
 ##Total Satisfaction
+```{r}
+hr_data$environmentsatisfaction[hr_data$environmentsatisfaction=="Low"] <- 1
+hr_data$environmentsatisfaction[hr_data$environmentsatisfaction=="Medium"] <- 2
+hr_data$environmentsatisfaction[hr_data$environmentsatisfaction=="High"] <- 3
+hr_data$environmentsatisfaction[hr_data$environmentsatisfaction=="Very High"] <- 4
+str(hr_data$environmentsatisfaction)
+
+hr_data$jobsatisfaction[hr_data$jobsatisfaction=="Low"] <- 1
+hr_data$jobsatisfaction[hr_data$jobsatisfaction=="Medium"] <- 2
+hr_data$jobsatisfaction[hr_data$jobsatisfaction=="High"] <- 3
+hr_data$jobsatisfaction[hr_data$jobsatisfaction=="Very High"] <- 4
+str(hr_data$jobsatisfaction)
+
+hr_data$relationshipsatisfaction[hr_data$relationshipsatisfaction=="Low"] <- 1
+hr_data$relationshipsatisfaction[hr_data$relationshipsatisfaction=="Medium"] <- 2
+hr_data$relationshipsatisfaction[hr_data$relationshipsatisfaction=="High"] <- 3
+hr_data$relationshipsatisfaction[hr_data$relationshipsatisfaction=="Very High"] <- 4
+str(hr_data$relationshipsatisfaction)
+
+hr_data$jobinvolvement[hr_data$jobinvolvement=="Low"] <- 1
+hr_data$jobinvolvement[hr_data$jobinvolvement=="Medium"] <- 2
+hr_data$jobinvolvement[hr_data$jobinvolvement=="High"] <- 3
+hr_data$jobinvolvement[hr_data$jobinvolvement=="Very High"] <- 4
+str(hr_data$jobinvolvement)
+
+hr_data$worklifebalance[hr_data$worklifebalance=="Bad"] <- 1
+hr_data$worklifebalance[hr_data$worklifebalance=="Good"] <- 2
+hr_data$worklifebalance[hr_data$worklifebalance=="Better"] <- 3
+hr_data$worklifebalance[hr_data$worklifebalance=="Best"] <- 4
+str(hr_data$worklifebalance)
+
+hr_data$OverallSatisfaction <- as.numeric(hr_data$environmentsatisfaction) + as.numeric(hr_data$jobsatisfaction) + as.numeric(hr_data$relationshipsatisfaction) + as.numeric(hr_data$jobinvolvement)
+
+str(hr_data$OverallSatisfaction)
+summary(hr_data$OverallSatisfaction)
+
+hr_data$OverallSatisfactionlevel <- as.factor(ifelse (hr_data$OverallSatisfaction < ave(hr_data$OverallSatisfaction), "Low", "High"))
+table(hr_data$OverallSatisfactionlevel,hr_data$Attrition)
+```
 
 ```{r}
 hr_data$jobclass <- hr_data$JobRole
@@ -366,25 +414,24 @@ ggplot(hr_data, aes(jobclass, fill = jobsatisfaction)) + geom_bar(stat= "count",
 ```
 It appears that the staffs are more satisfied with their jobs than the directors and the job satisfaction is not necessarily the factor that the staffs are leaving the organization. 
 
+
+
+```{r}
+#Income level
+hr_data$Incomelevel <- as.factor(ifelse (hr_data$MonthlyIncome < ave(hr_data$MonthlyIncome), "Low", "High"))
+table(hr_data$Incomelevel, hr_data$Attrition)
+```
+
 ## Data modeling
 
 #Divide the data into training and test dataset.
-trainIndex <- createDataPartition(hrdata$left, p = 0.7, list = FALSE, times = 1)
-trainData <- hrdata[trainIndex,]
-testData  <- hrdata[-trainIndex,]
-```{r}
-#Divide the data into training and test dataset.
-trainIndex <- createDataPartition(hr_data$Attrition, p = 0.7, list = FALSE, times = 1)
-trainData <- hr_data[trainIndex,]
-testData  <- hr_data[-trainIndex,]
 
-```
 
 Data Preprocessing
 Convert characters to factors and remove 
 ```{r}
 hr_dataclean <- hr_data
-hr_dataclean = hr_dataclean[,!(names(hr_dataclean) %in% c('Marital Status','Job Role','Attrition (Yes/No)','Marital Status','Education Field','Business Travel','Job Involvement','Job Satisfaction','Job Level','Hourly Rate (USD)','Daily Rate (USD)','Monthly Rate (USD)','Monthly Income (USD)','Salary Hike (%)','Stock Option Level','Over Time','No. of Companies Worked','Total Working Years','Years At Company','Years In Current Role','Years Since Last Promotion','Years With Curr Manager','Environment Satisfaction','Training Times Last Year','Work Life Balance','Performance Rating','Relationship Satisfaction','Distance From Home (kms)'))]
+hr_dataclean = hr_dataclean[,!(names(hr_dataclean) %in% c('Marital Status','Job Role','Attrition (Yes/No)','Marital Status','Education Field','Business Travel','Job Involvement','Job Satisfaction','Job Level','Hourly Rate (USD)','Daily Rate (USD)','Monthly Rate (USD)','Monthly Income (USD)','Salary Hike (%)','Stock Option Level','Over Time','No. of Companies Worked','Total Working Years','Years At Company','Years In Current Role','Years Since Last Promotion','Years With Curr Manager','Environment Satisfaction','Training Times Last Year','Work Life Balance','Performance Rating','Relationship Satisfaction','Distance From Home (kms)', 'es'))]
 str(hr_dataclean)
 
 ```
@@ -398,19 +445,121 @@ hr_dataclean$JobRole <- as.factor(hr_dataclean$JobRole)
 hr_dataclean$educationfield <- as.factor(hr_dataclean$educationfield)
 hr_dataclean$jobsatisfaction <- as.factor(hr_dataclean$jobsatisfaction)
 hr_dataclean$jobinvolvement <- as.factor(hr_dataclean$jobinvolvement)
+hr_dataclean$relationshipsatisfaction <- as.factor(hr_dataclean$relationshipsatisfaction)
+hr_dataclean$worklifebalance <- as.factor(hr_dataclean$worklifebalance)
+hr_dataclean$environmentsatisfaction <- as.factor(hr_dataclean$environmentsatisfaction)
+hr_dataclean$overtime <- as.factor(hr_dataclean$overtime)
+hr_dataclean$performancerating <- as.factor(hr_dataclean$performancerating)
+hr_dataclean$jobclass <- as.factor(hr_dataclean$jobclass)
+hr_dataclean$Gender <- as.factor(hr_dataclean$Gender)
 
+str(hr_dataclean)
+```
+```{r}
+#Divide the data into training and test dataset.
+trainIndex <- createDataPartition(hr_dataclean$Attrition, p = 0.7, list = FALSE)
+trainData <- hr_dataclean[trainIndex,]
+testData  <- hr_dataclean[-trainIndex,]
+```
 
+#uSING THE SMOTE METHOD TO balance claassification
+```{r}
+smote_train=SMOTE(Attrition ~ .,data=trainData)
+q= prop.table(table(smote_train$Attrition))
+cat("Proportions are"); print(q, row.names=FALSE)
 
+```
 
+#Feature selection using Boruta
 
-
-
+```{r}
+set.seed(1337)
+boruta_output=Boruta(Attrition~.,data=smote_train,doTrace=2)
+print(boruta_output)
 
 
 ```
+#Tentative feature
+
+Print out the new important features and display the boruta plot
+
+```{r}
+boruta_train <- TentativeRoughFix(boruta_output)
+
+
+cat("New important features", getSelectedAttributes(boruta_train), sep = "\n")
+plot(boruta_train, cex.axis=.7, las=2, xlab="", main="Variable Importance")
+
+```
+Display the boruta output statistics
+```{r}
+boruta_stat <- attStats(boruta_output)
+print(boruta_stat)
+
+```
+
+
 
 ##Logistic regression model
 ```{r}
+set.seed(1337)
+library(randomForest)
+Raw.rf.model <- randomForest(Attrition~.,smote_train, importance=TRUE,ntree=500)
+varImpPlot(Raw.rf.model)
+
 
 ```
+```{r}
+trainData <- as.data.frame(trainData)
+str(trainData)
+library(ggRandomForests)
+rfscrc_data <- rfsrc(Attrition ~ .,trainData)
+plot(gg_vimp(rfscrc_data))
+```
+
+```{r}
+set.seed(1337)
+
+trainControl <- trainControl(method = "cv", repeats = 10)
+fit_glm <- train(Attrition ~ Department + Gender + Age + Education + MaritalStatus + BusinessTravel +JobRole + DistancefromHome + MonthlyIncome + DailyRate + HourlyRate + MonthlyRate + Numcompworked + Yearsatcompany + Yearssincelastpromotion +Yearswithcurrmanager +Yearsincurrentrole + totalworkingyears + trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction +worklifebalance +environmentsatisfaction + overtime + performancerating + AgeGroup + jobclass, method = "rf", data = hr_dataclean, trControl = trainCtrl)
+ confusionMatrix(fit_glm)
+
+
+```
+```{r}
+set.seed(1337)
+#remove total working years
+fit_glm1 <- train(Attrition ~ Department + Gender + Age + Education + MaritalStatus + BusinessTravel +JobRole + DistancefromHome + MonthlyIncome + DailyRate + HourlyRate + MonthlyRate + Numcompworked + Yearsatcompany + Yearssincelastpromotion +Yearswithcurrmanager +Yearsincurrentrole + trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction +worklifebalance +environmentsatisfaction + overtime + performancerating + AgeGroup + jobclass, method = "rf", data = hr_dataclean, trControl = trainCtrl)
+ confusionMatrix(fit_glm1)
+
+```
+
+
+```{r}
+#remove years with current manager
+set.seed(1337)
+fit_glm3 <- train(Attrition ~ Department + Gender + Age + Education + MaritalStatus + BusinessTravel +JobRole + DistancefromHome + MonthlyIncome + DailyRate + HourlyRate + MonthlyRate + Numcompworked + Yearsatcompany + Yearssincelastpromotion +Yearswithcurrmanager +Yearsincurrentrole + totalworkingyears + trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction +worklifebalance +environmentsatisfaction + overtime + performancerating + AgeGroup + jobclass, method = "rf", data = hr_dataclean, trControl = trainCtrl)
+ confusionMatrix(fit_glm3)
+```
+
+
+```{r}
+fit_glm2 <- train(Attrition ~ Department + Gender + Age + Education + MaritalStatus + BusinessTravel +JobRole + DistancefromHome + MonthlyIncome + DailyRate + HourlyRate + MonthlyRate + totalRate + Numcompworked + Yearsatcompany + Yearssincelastpromotion +Yearswithcurrmanager +Yearsincurrentrole + totalworkingyears + trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction +worklifebalance +environmentsatisfaction + overtime + performancerating + jobclass + AgeGroup, method = "rf", data = hr_dataclean, trControl = trainCtrl)
+ confusionMatrix(fit_glm2)
+```
+
+
+```{r}
+str(testData)
+```
+
+
+
+```{r}
+set.seed(1337)
+Predictions_glm <- predict(fit_glm, testData)
+confusionMatrix(Predictions_glm,testData$Attrition)
+
+```
+
 
