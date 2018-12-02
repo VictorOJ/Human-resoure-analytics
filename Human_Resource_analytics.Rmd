@@ -462,13 +462,22 @@ trainData <- hr_dataclean[trainIndex,]
 testData  <- hr_dataclean[-trainIndex,]
 ```
 
-#uSING THE SMOTE METHOD TO balance claassification
+#uSING THE SMOTE METHOD TO balance classification
+
+The data(Attrition is unbalanced)
+
 ```{r}
+prop.table(table(hr_data$Attrition))*100
 smote_train=SMOTE(Attrition ~ .,data=trainData)
-q= prop.table(table(smote_train$Attrition))
-cat("Proportions are"); print(q, row.names=FALSE)
+balanced_data =  prop.table(table(smote_train$Attrition))*100
+cat("Balanced proportions is"); print(balanced_data, row.names=FALSE)
+
 
 ```
+The unbalanced data showed that 84% stayed as compared to 16% who left the organization, however doing a binary classification has balanced the data set and now we have 57% who did not leave as compared to 43% who left.
+
+We will proceed to feature selection using the Boruta package. We can also use the lime package, but in this notebook, we will use the Boruta package. 
+
 
 #Feature selection using Boruta
 
@@ -476,7 +485,6 @@ cat("Proportions are"); print(q, row.names=FALSE)
 set.seed(1337)
 boruta_output=Boruta(Attrition~.,data=smote_train,doTrace=2)
 print(boruta_output)
-
 
 ```
 #Tentative feature
@@ -488,7 +496,7 @@ boruta_train <- TentativeRoughFix(boruta_output)
 
 
 cat("New important features", getSelectedAttributes(boruta_train), sep = "\n")
-plot(boruta_train, cex.axis=.7, las=2, xlab="", main="Variable Importance")
+plot(boruta_train, cex.axis=.7, las=2, xlab=" ", main="Variable Importance")
 
 ```
 Display the boruta output statistics
@@ -504,18 +512,80 @@ print(boruta_stat)
 ```{r}
 set.seed(1337)
 library(randomForest)
-Raw.rf.model <- randomForest(Attrition~.,smote_train, importance=TRUE,ntree=500)
-varImpPlot(Raw.rf.model)
+rf_importance <- randomForest(Attrition~.,smote_train, importance=TRUE,ntree=500)
+varImpPlot(rf_importance)
+
+
+```
+
+##Model fitting
+
+#basic Parameter tuning-Cross Validation
+
+```{r}
+set.seed(1337)
+trainControl <- trainControl(method = "cv", repeats = 10)
+
+#Using the full dataset while ignoring the feature selection
+
+##Logistic Regression
+fit_glm <- train(Attrition~. ,method="rf", data = smote_train, trControl = trainControl)
+
+confusionMatrix(fit_glm)
+
+```
+
+Removing unimportant features
+```{r}
+set.seed(1337)
+smote_trainrem = smote_train[,!(names(smote_train) %in% c("Gender","performancerating"))]
+#Logistic regression
+fit_glm1 <- train(Attrition~. ,method="rf", data = smote_trainrem, trControl = trainControl)
+
+confusionMatrix(fit_glm1)
 
 
 ```
 ```{r}
-trainData <- as.data.frame(trainData)
-str(trainData)
-library(ggRandomForests)
-rfscrc_data <- rfsrc(Attrition ~ .,trainData)
-plot(gg_vimp(rfscrc_data))
+head(smote_trainrem)
 ```
+
+
+
+##removing the correlated variables
+
+```{r}
+set.seed(1337)
+overall_glm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole + Yearswithcurrmanager + Yearssincelastpromotion + totalworkingyears + trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "rf", data = smote_trainrem, trControl = trainControl)
+ confusionMatrix(overall_glm)
+```
+
+```{r}
+# Removing total working years, years with current manager
+
+set.seed(1337)
+overall_glm1 <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "rf", data = smote_trainrem, trControl = trainControl)
+ confusionMatrix(overall_glm1)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ```{r}
 set.seed(1337)
