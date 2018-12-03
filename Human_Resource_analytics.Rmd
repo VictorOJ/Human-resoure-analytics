@@ -19,7 +19,7 @@ library(DMwR) #BINARY CLASSIFICATION
 
 Import the data
 ```{r}
-hr_data <- hr_data_raw <- HR_Employee_Attrition_data
+hr_data  <- HR_Employee_Attrition_data
 str(hr_data)
 ```
 Looking at the dataset, there are too many variables and we might not need all. For example. We will exclude "Over 18", "Employee Count", "Standard Hours". Those variables are not informative and there is not variance in these variables 
@@ -197,13 +197,13 @@ data_corr = hr_data %>%
 corrplot(cor(data_corr), method = "square", type="upper")
 ```
 
-after observing the correlation plot, we observe that there are a number of highly correlated predictors. we observe that the number of highly correlated features are:
-Age and monthly income and total working years
-MOnthly income and total working years
-Years at compaany, years in current role
-years with current manager and total working years
-Job level and monthly income. 
-# because of colinearity, we should exclude monthly income, total working years, Years with current manager
+From the correlation plot, we observe correlated features. We will exclude the variables that are correlated from the model. (Colinearity). The correlated variables are:
+Age and total working years
+Total working years and monthly income
+Years with current manager and years at company
+Years with current current manager and years in current role
+
+# The variables we will exclude are Years with current manager and total working years 
 
 
 ##Attrition and Salary Hike
@@ -212,11 +212,11 @@ Visualizing salary hike and attrition
 ```{r}
 ggplot(hr_data,aes(salaryhike, fill = Attrition)) + geom_histogram(binwidth =  5) 
 #Salary Hike and Years at company
-ggplot(hr_data,aes(Yearsatcompany,salaryhike,colour = salaryhike)) +geom_point(alpha = 0.5)
+ggplot(hr_data,aes(Yearsatcompany,salaryhike,col=(Attrition),size = salaryhike)) +geom_point(alpha = 0.5)
 
 
 #Salary Hike and Years at experience
-ggplot(hr_data,aes(totalworkingyears,salaryhike,col=(Attrition),colour = salaryhike))+ geom_point(alpha = 0.5)
+#ggplot(hr_data,aes(totalworkingyears,salaryhike,col=(Attrition),colour = salaryhike))+ geom_point(alpha = 0.5)
 
 ```
 From the data visualization, we can see that there is no linear relationship between totalworkingyears 
@@ -431,7 +431,7 @@ Data Preprocessing
 Convert characters to factors and remove 
 ```{r}
 hr_dataclean <- hr_data
-hr_dataclean = hr_dataclean[,!(names(hr_dataclean) %in% c('Marital Status','Job Role','Attrition (Yes/No)','Marital Status','Education Field','Business Travel','Job Involvement','Job Satisfaction','Job Level','Hourly Rate (USD)','Daily Rate (USD)','Monthly Rate (USD)','Monthly Income (USD)','Salary Hike (%)','Stock Option Level','Over Time','No. of Companies Worked','Total Working Years','Years At Company','Years In Current Role','Years Since Last Promotion','Years With Curr Manager','Environment Satisfaction','Training Times Last Year','Work Life Balance','Performance Rating','Relationship Satisfaction','Distance From Home (kms)', 'es'))]
+hr_dataclean = hr_dataclean[,!(names(hr_dataclean) %in% c('Marital Status','Job Role','Attrition (Yes/No)','Marital Status','Education Field','Business Travel','Job Involvement','Job Satisfaction','Job Level','Hourly Rate (USD)','Daily Rate (USD)','Monthly Rate (USD)','Monthly Income (USD)','Salary Hike (%)','Stock Option Level','Over Time','No. of Companies Worked','Total Working Years','Years At Company','Years In Current Role','Years Since Last Promotion','Years With Curr Manager','Environment Satisfaction','Training Times Last Year','Work Life Balance','Performance Rating','Relationship Satisfaction','Distance From Home (kms)'))]
 str(hr_dataclean)
 
 ```
@@ -546,90 +546,55 @@ confusionMatrix(fit_glm1)
 
 
 ```
-```{r}
-head(smote_trainrem)
-```
+
 
 
 
 ##removing the correlated variables
 
-```{r}
-set.seed(1337)
-overall_glm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole + Yearswithcurrmanager + Yearssincelastpromotion + totalworkingyears + trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "rf", data = smote_trainrem, trControl = trainControl)
- confusionMatrix(overall_glm)
-```
+
+#Random Forest
 
 ```{r}
 # Removing total working years, years with current manager
 
 set.seed(1337)
-overall_glm1 <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "rf", data = smote_trainrem, trControl = trainControl)
- confusionMatrix(overall_glm1)
+model_rf <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "rf", data = smote_trainrem, trControl = trainControl)
+ confusionMatrix(model_rf)
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#Support vector machine
 
 ```{r}
 set.seed(1337)
-
-trainControl <- trainControl(method = "cv", repeats = 10)
-fit_glm <- train(Attrition ~ Department + Gender + Age + Education + MaritalStatus + BusinessTravel +JobRole + DistancefromHome + MonthlyIncome + DailyRate + HourlyRate + MonthlyRate + Numcompworked + Yearsatcompany + Yearssincelastpromotion +Yearswithcurrmanager +Yearsincurrentrole + totalworkingyears + trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction +worklifebalance +environmentsatisfaction + overtime + performancerating + AgeGroup + jobclass, method = "rf", data = hr_dataclean, trControl = trainCtrl)
- confusionMatrix(fit_glm)
-
-
-```
-```{r}
-set.seed(1337)
-#remove total working years
-fit_glm1 <- train(Attrition ~ Department + Gender + Age + Education + MaritalStatus + BusinessTravel +JobRole + DistancefromHome + MonthlyIncome + DailyRate + HourlyRate + MonthlyRate + Numcompworked + Yearsatcompany + Yearssincelastpromotion +Yearswithcurrmanager +Yearsincurrentrole + trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction +worklifebalance +environmentsatisfaction + overtime + performancerating + AgeGroup + jobclass, method = "rf", data = hr_dataclean, trControl = trainCtrl)
- confusionMatrix(fit_glm1)
-
+model_svm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "svmLinear", data = smote_trainrem, trControl = trainControl)
+ confusionMatrix(model_svm)
 ```
 
-
-```{r}
-#remove years with current manager
-set.seed(1337)
-fit_glm3 <- train(Attrition ~ Department + Gender + Age + Education + MaritalStatus + BusinessTravel +JobRole + DistancefromHome + MonthlyIncome + DailyRate + HourlyRate + MonthlyRate + Numcompworked + Yearsatcompany + Yearssincelastpromotion +Yearswithcurrmanager +Yearsincurrentrole + totalworkingyears + trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction +worklifebalance +environmentsatisfaction + overtime + performancerating + AgeGroup + jobclass, method = "rf", data = hr_dataclean, trControl = trainCtrl)
- confusionMatrix(fit_glm3)
-```
-
-
-```{r}
-fit_glm2 <- train(Attrition ~ Department + Gender + Age + Education + MaritalStatus + BusinessTravel +JobRole + DistancefromHome + MonthlyIncome + DailyRate + HourlyRate + MonthlyRate + totalRate + Numcompworked + Yearsatcompany + Yearssincelastpromotion +Yearswithcurrmanager +Yearsincurrentrole + totalworkingyears + trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction +worklifebalance +environmentsatisfaction + overtime + performancerating + jobclass + AgeGroup, method = "rf", data = hr_dataclean, trControl = trainCtrl)
- confusionMatrix(fit_glm2)
-```
-
-
-```{r}
-str(testData)
-```
-
-
+#Logistic regression
 
 ```{r}
 set.seed(1337)
-Predictions_glm <- predict(fit_glm, testData)
-confusionMatrix(Predictions_glm,testData$Attrition)
-
+model_glm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "glm", data = smote_trainrem, trControl = trainControl)
+ confusionMatrix(model_glm)
 ```
+
+Extreme Gradient Boost
+```{r}
+library(xgboost)
+set.seed(1337)
+model_xgb <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "xgbLinear", data = smote_trainrem, trControl = trainControl)
+ confusionMatrix(model_xgb)
+```
+
+
+
+
+
+
+
+
+
+
 
 
