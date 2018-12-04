@@ -15,6 +15,7 @@ library(Boruta) #Feature selection
 library(randomForest) #Random forest
 library(ggRandomForests) #variable importance random forest
 library(DMwR) #BINARY CLASSIFICATION
+library(pROC) #ROC PLOT
 ```
 
 Import the data
@@ -421,6 +422,13 @@ It appears that the staffs are more satisfied with their jobs than the directors
 hr_data$Incomelevel <- as.factor(ifelse (hr_data$MonthlyIncome < ave(hr_data$MonthlyIncome), "Low", "High"))
 table(hr_data$Incomelevel, hr_data$Attrition)
 ```
+# Years without employee change
+
+
+```{r}
+hr_data$Yearswithoutchange <- hr_data$Yearsincurrentrole - hr_data$Yearssincelastpromotion
+str(hr_data$Yearswithoutchange)
+```
 
 ## Data modeling
 
@@ -432,7 +440,6 @@ Convert characters to factors and remove
 ```{r}
 hr_dataclean <- hr_data
 hr_dataclean = hr_dataclean[,!(names(hr_dataclean) %in% c('Marital Status','Job Role','Attrition (Yes/No)','Marital Status','Education Field','Business Travel','Job Involvement','Job Satisfaction','Job Level','Hourly Rate (USD)','Daily Rate (USD)','Monthly Rate (USD)','Monthly Income (USD)','Salary Hike (%)','Stock Option Level','Over Time','No. of Companies Worked','Total Working Years','Years At Company','Years In Current Role','Years Since Last Promotion','Years With Curr Manager','Environment Satisfaction','Training Times Last Year','Work Life Balance','Performance Rating','Relationship Satisfaction','Distance From Home (kms)'))]
-str(hr_dataclean)
 
 ```
 ```{r}
@@ -468,7 +475,8 @@ The data(Attrition is unbalanced)
 
 ```{r}
 prop.table(table(hr_data$Attrition))*100
-smote_train=SMOTE(Attrition ~ .,data=trainData)
+trainData <- as.data.frame(trainData)
+smote_train <- SMOTE(Attrition ~ .,data=trainData)
 balanced_data =  prop.table(table(smote_train$Attrition))*100
 cat("Balanced proportions is"); print(balanced_data, row.names=FALSE)
 
@@ -538,7 +546,7 @@ confusionMatrix(fit_glm)
 Removing unimportant features
 ```{r}
 set.seed(1337)
-smote_trainrem = smote_train[,!(names(smote_train) %in% c("Gender","performancerating"))]
+smote_trainrem = smote_train[,!(names(smote_train) %in% c("Gender", "performancerating"))]
 #Logistic regression
 fit_glm1 <- train(Attrition~. ,method="rf", data = smote_trainrem, trControl = trainControl)
 
@@ -559,7 +567,7 @@ confusionMatrix(fit_glm1)
 # Removing total working years, years with current manager
 
 set.seed(1337)
-model_rf <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "rf", data = smote_trainrem, trControl = trainControl)
+model_rf <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + performancerating, method = "rf", data = smote_trainrem, trControl = trainControl)
  confusionMatrix(model_rf)
 ```
 
@@ -567,7 +575,7 @@ model_rf <- train(Attrition ~ Department + Age + Education + MaritalStatus + Bus
 
 ```{r}
 set.seed(1337)
-model_svm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "svmLinear", data = smote_trainrem, trControl = trainControl)
+model_svm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + performancerating, method = "svmRadial", data = smote_trainrem, trControl = trainControl)
  confusionMatrix(model_svm)
 ```
 
@@ -575,7 +583,7 @@ model_svm <- train(Attrition ~ Department + Age + Education + MaritalStatus + Bu
 
 ```{r}
 set.seed(1337)
-model_glm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "glm", data = smote_trainrem, trControl = trainControl)
+model_glm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + performancerating , method = "glm", data = smote_trainrem, trControl = trainControl, family = binomial(logit))
  confusionMatrix(model_glm)
 ```
 
@@ -583,18 +591,108 @@ Extreme Gradient Boost
 ```{r}
 library(xgboost)
 set.seed(1337)
-model_xgb <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel , method = "xgbLinear", data = smote_trainrem, trControl = trainControl)
+model_xgb <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + performancerating, method = "xgbTree", data = smote_trainrem, trControl = trainControl)
  confusionMatrix(model_xgb)
+```
+
+
+```{r}
+varImp(model_xgb)
+importance <- varImp(model_xgb)
+varImportance <- data.frame(Variables = row.names(importance[[1]]), 
+                            Importance = round(importance[[1]]$Overall,2))
+
+rankImportance <- varImportance %>%
+          mutate(Rank = paste0('Number',dense_rank(desc(Importance))))
+          ggplot(rankImportance, aes(x = reorder(Variables, Importance), y = Importance)) +
+          geom_bar(stat='identity',fill = "red") +
+        labs(x = 'Variables', title = 'Relative Variable Importance') +
+        coord_flip()
+
+
+
+
+
+```
+# Linear discriminant analysis
+
+```{r}
+set.seed(1337)
+model_lda <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + totalRate + Numcompworked + Yearsatcompany + Yearsincurrentrole +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + performancerating, method = "lda", data = smote_trainrem, trControl = trainControl)
+ confusionMatrix(model_lda)
+```
+```{r}
+
+```
+
+Predictions
+
+```{r}
+set.seed(1337)
+Predictions_rf <- predict(model_rf, testData)
+Predictions_xgb <- predict(model_xgb, testData)
+Predictions_glm <- predict(model_glm, testData)
+Predictions_svm <- predict(model_svm,testData)
+Predictions_lda <- predict(model_lda,testData)
+
+```
+```{r}
+confusionMatrix(Predictions_rf, testData$Attrition)
+```
+
+
+```{r}
+confusionMatrix(Predictions_glm, testData$Attrition)
+```
+
+```{r}
+confusionMatrix(Predictions_svm, testData$Attrition)
+```
+
+```{r}
+confusionMatrix(Predictions_xgb, testData$Attrition)
+```
+
+```{r}
+confusionMatrix(Predictions_lda, testData$Attrition)
 ```
 
 
 
 
+```{r}
+
+roc_rf <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_rf))
+roc_rf$auc
+
+roc_svm <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_svm))
+roc_svm$auc
+
+roc_xgb <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_xgb))
+roc_xgb$auc
+
+roc_lda <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_lda))
+roc_lda$auc
+
+roc_glm <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_glm))
+roc_glm$auc
 
 
 
 
+```
+```{r}
+plot(roc_rf, ylim = c(0,1), print.thres = T, main = "ROC curves", col = "blue")
+plot(roc_glm, ylim = c(0,1), print.thres = T, col = "green", add = T)
+plot(roc_lda, ylim = c(0,1), print.thres = T,  col = "yellow", add = T)
+plot(roc_svm, ylim = c(0,1), print.thres = T,  col = "burlywood", add = T)
+plot(roc_xgb, ylim = c(0,1), print.thres = T,  col = "purple", add = T)
+
+
+```
+```{r}
 
 
 
+```
 
