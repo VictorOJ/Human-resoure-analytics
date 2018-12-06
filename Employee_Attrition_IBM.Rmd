@@ -23,6 +23,7 @@ library(shiny)
 library(readxl)
 library(plotly)
 library(ROCR)
+library(xgboost)
 ```
 
 Import and read data
@@ -217,6 +218,7 @@ hr_data$totalworkingyears <- hr_data$`Total Working Years`
 hr_data$trainingtimeslastyear <- hr_data$`Training Times Last Year`
 hr_data$stockoptionlevel <- hr_data$`Stock Option Level`
 hr_data$salaryhike <- hr_data$`Salary Hike (%)`
+hr_data$joblevel <- hr_data$`Job Level`
 data_corr = hr_data %>% 
   dplyr::select(Age,DailyRate,DistancefromHome,HourlyRate,MonthlyIncome,MonthlyRate, Numcompworked,salaryhike,Yearsatcompany,Yearsincurrentrole,Yearssincelastpromotion,Yearswithcurrmanager,totalworkingyears,trainingtimeslastyear,stockoptionlevel)
 
@@ -348,7 +350,8 @@ ggplot(aes(x=AgeGroup,y=attrition_rate,fill=worklifebalance)) + geom_bar(stat="i
 age_work
 ```
 ```{r}
-#Agegroup and monthly income by (department,job class)
+#Change job level to factor
+hr_data$joblevel <- as.factor(hr_data$joblevel)
 
 #
 ```
@@ -441,7 +444,7 @@ ggplot(hr_data, aes(jobclass, fill = jobsatisfaction)) + geom_bar(stat= "count",
 It appears that the staffs are more satisfied with their jobs than the directors and the job satisfaction is not necessarily the factor that the staffs are leaving the organization. 
 
 
-
+#Income level
 ```{r}
 #Income level
 hr_data$Incomelevel <- as.factor(ifelse (hr_data$MonthlyIncome < ave(hr_data$MonthlyIncome), "Low", "High"))
@@ -484,6 +487,7 @@ hr_dataclean$overtime <- as.factor(hr_dataclean$overtime)
 hr_dataclean$performancerating <- as.factor(hr_dataclean$performancerating)
 hr_dataclean$jobclass <- as.factor(hr_dataclean$jobclass)
 hr_dataclean$Gender <- as.factor(hr_dataclean$Gender)
+hr_dataclean$stockoptionlevel <- as.factor(hr_dataclean$stockoptionlevel)
 
 str(hr_dataclean)
 ```
@@ -503,11 +507,18 @@ The data(Attrition is unbalanced)
 prop.table(table(hr_data$Attrition))*100
 trainData <- as.data.frame(trainData)
 smote_train <- SMOTE(Attrition ~ .,data=trainData)
+smote_test <- SMOTE(Attrition ~ .,data=testData)
 balanced_data =  prop.table(table(smote_train$Attrition))*100
 cat("Balanced proportions is"); print(balanced_data, row.names=FALSE)
 
 
 ```
+```{r}
+balanced_data1 =  prop.table(table(smote_train$Attrition))*100
+cat("Balanced proportion of test is"); print(balanced_data1, row.names=FALSE)
+
+```
+
 The unbalanced data showed that 84% stayed as compared to 16% who left the organization, however doing a binary classification has balanced the data set and now we have 57% who did not leave as compared to 43% who left.
 
 We will proceed to feature selection using the Boruta package. We can also use the lime package, but in this notebook, we will use the Boruta package. 
@@ -553,7 +564,7 @@ smote_trainrem = smote_train[,!(names(smote_train) %in% c("Gender", "performance
 ```{r}
 set.seed(1337)
 library(randomForest)
-rf_varimportance <- randomForest(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome +  Numcompworked + Yearsatcompany +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange, smote_trainrem, importance=TRUE,ntree=500)
+rf_varimportance <- randomForest(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome +  Numcompworked + Yearsatcompany +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange + joblevel , smote_trainrem, importance=TRUE,ntree=500)
 
 ```
 
@@ -601,7 +612,7 @@ confusionMatrix(fit_glm1)
 # Removing total working years, years with current manager, years in current role
 
 set.seed(1337)
-model_rf <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + Numcompworked + Yearsatcompany + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange, method = "rf", data = smote_trainrem, trControl = trainControl)
+model_rf <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + Numcompworked + Yearsatcompany + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange + joblevel, method = "rf", data = smote_trainrem, trControl = trainControl)
  confusionMatrix(model_rf)
 ```
 
@@ -609,7 +620,7 @@ model_rf <- train(Attrition ~ Department + Age + Education + MaritalStatus + Bus
 
 ```{r}
 set.seed(1337)
-model_svm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + Numcompworked + Yearsatcompany + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange, method = "svmRadial", data = smote_trainrem, trControl = trainControl)
+model_svm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + Numcompworked + Yearsatcompany + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange + joblevel, method = "svmRadial", data = smote_trainrem, trControl = trainControl)
  confusionMatrix(model_svm)
 ```
 
@@ -617,7 +628,7 @@ model_svm <- train(Attrition ~ Department + Age + Education + MaritalStatus + Bu
 
 ```{r}
 set.seed(1337)
-model_glm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome +  Numcompworked + Yearsatcompany  + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange , method = "glm", data = smote_trainrem, trControl = trainControl, family = binomial(logit))
+model_glm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome +  Numcompworked + Yearsatcompany  + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + joblevel + Yearswithoutchange , method = "glm", data = smote_trainrem, trControl = trainControl, family = binomial(logit))
  confusionMatrix(model_glm)
 ```
 
@@ -625,8 +636,23 @@ Extreme Gradient Boost
 ```{r}
 library(xgboost)
 set.seed(1337)
-model_xgb <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome +  Numcompworked + Yearsatcompany +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange, method = "xgbTree", data = smote_trainrem, trControl = trainControl)
+model_xgb <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome +  Numcompworked + Yearsatcompany +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange + joblevel, method = "xgbTree", data = smote_trainrem, trControl = trainControl)
  confusionMatrix(model_xgb)
+```
+
+#Tuned Extreme gradient boost
+```{r}
+
+set.seed(1337)
+fitControl <- trainControl(method ="cv", number = 10)
+xgbGrid <- expand.grid(nrounds = 50, max_depth = 12, eta = .03, gamma = 0.01, colsample_bytree = .7, min_child_weight =1, subsample= 0.9)
+
+model_xgb1 <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome +  Numcompworked + Yearsatcompany +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange + joblevel, method = "xgbTree", data = smote_trainrem, trControl = fitControl, tuneGrid = xgbGrid)
+ confusionMatrix(model_xgb1)
+ Predictions_xgb1 <- predict(model_xgb1, smote_test)
+ 
+ confusionMatrix(Predictions_xgb1, smote_test$Attrition)
+
 ```
 
 
@@ -657,47 +683,47 @@ rankImportance <- varImportance %>%
 
 ```{r}
 set.seed(1337)
-model_lda <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + Numcompworked + Yearsatcompany + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange, method = "lda", data = smote_trainrem, trControl = trainControl)
+model_lda <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + Numcompworked + Yearsatcompany + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange + joblevel, method = "lda", data = smote_trainrem, trControl = trainControl)
  confusionMatrix(model_lda)
 
 
 ```
 
-Predictions
+#Predictions
 
 `
 ```{r}
 set.seed(1337)
-Predictions_rf <- predict(model_rf, testData)
-confusionMatrix(Predictions_rf, testData$Attrition)
+Predictions_rf <- predict(model_rf, smote_test)
+confusionMatrix(Predictions_rf, smote_test$Attrition)
 ```
 
 
 ```{r}
 set.seed(1337)
-Predictions_glm <- predict(model_glm, testData)
+Predictions_glm <- predict(model_glm, smote_test)
 
-confusionMatrix(Predictions_glm, testData$Attrition)
+confusionMatrix(Predictions_glm, smote_test$Attrition)
 ```
 
 ```{r}
 set.seed(1337)
-Predictions_svm <- predict(model_svm,testData)
+Predictions_svm <- predict(model_svm,smote_test)
 
-confusionMatrix(Predictions_svm, testData$Attrition)
+confusionMatrix(Predictions_svm, smote_test$Attrition)
 ```
 
 ```{r}
-Predictions_xgb <- predict(model_xgb, testData)
+Predictions_xgb <- predict(model_xgb, smote_test)
 
-confusionMatrix(Predictions_xgb, testData$Attrition)
+confusionMatrix(Predictions_xgb, smote_test$Attrition)
 ```
 
 ```{r}
 set.seed(1337)
-Predictions_lda <- predict(model_lda,testData)
+Predictions_lda <- predict(model_lda,smote_test)
 
-confusionMatrix(Predictions_lda, testData$Attrition)
+confusionMatrix(Predictions_lda, smote_test$Attrition)
 ```
 
 
@@ -705,19 +731,19 @@ confusionMatrix(Predictions_lda, testData$Attrition)
 
 #```{r}
 
-roc_rf <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_rf))
+roc_rf <- roc(as.numeric(smote_test$Attrition), as.numeric(Predictions_rf))
 roc_rf$auc
 
-roc_svm <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_svm))
+roc_svm <- roc(as.numeric(smote_test$Attrition), as.numeric(Predictions_svm))
 roc_svm$auc
 
-roc_xgb <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_xgb))
+roc_xgb <- roc(as.numeric(smote_test$Attrition), as.numeric(Predictions_xgb))
 roc_xgb$auc
 
-roc_lda <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_lda))
+roc_lda <- roc(as.numeric(smote_test$Attrition), as.numeric(Predictions_lda))
 roc_lda$auc
 
-roc_glm <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_glm))
+roc_glm <- roc(as.numeric(smote_test$Attrition), as.numeric(Predictions_glm))
 roc_glm$auc
 
 
@@ -741,10 +767,10 @@ plot(roc_xgb, ylim = c(0,1),  col = "purple", add = T)
 getPerformanceTable <- function(model, matrix) {
   sensitivity <- round(matrix[4] / (matrix[4] + matrix[1]), digits = 2)
   specificity <- round(matrix[2] / (matrix[2] + matrix[3]), digits = 2)
-  #precision <- round(matrix[4] / (matrix[4] + matrix[3]), digits = 2)
+  precision <- round(matrix[4] / (matrix[4] + matrix[3]), digits = 2)
   #f1 <- round(2*precision*sensitivity / (precision+sensitivity), digits = 2)
-  #recall <- sensitivity
-  performanceTable <- data.frame(Model = model, Sensitivity = sensitivity, Specificity = specificity)
+  recall <- sensitivity
+  performanceTable <- data.frame(Model = model, Sensitivity = sensitivity, Specificity = specificity, Precision = precision, recall = recall)
 #performanceTable <- data.frame(Model = model, Sensitivity = sensitivity, Specificity = specificity, 
                        # Precision = precision, Recall = recall, F1 = f1)
   return(performanceTable)
@@ -765,6 +791,8 @@ ui <- dashboardPage(
   skin = "blue", 
   # Header content
   dashboardHeader(title = "Human Resources Analytics", titleWidth = 300),
+  
+  
   # Sidebar content
   dashboardSidebar(
     sidebarMenu(
@@ -775,8 +803,11 @@ ui <- dashboardPage(
          menuSubItem("Exploratory Data Analysis(1)", tabName = "plot1"), menuSubItem("Exploratory Data Analysis(2)", tabName = "plot2"), menuSubItem("Exploratory Data Analysis(3)", tabName = "plot3")),
       
       menuItem("Model Prediction", tabName = "model", icon = icon("check")),
+
+      menuItem("Findings", tabName = "finding", icon = icon("check"))
+
       
-      menuItem(" Reference Source Code", href = "https://github.com/tammykan/Human-Resources-Analytics", icon = icon("code"))
+      #menuItem(" Reference Source Code", href = #"https://github.com/tammykan/Human-Resources-Analytics", icon = icon("code"))
     )
   ),
   
@@ -792,9 +823,11 @@ ui <- dashboardPage(
               p("Foudations of Informatics for Practice"),
               img(src="http://www.thecareermuse.co.in/wp-content/uploads/2017/09/Human-Resource-Planning-560x315.jpg", width = "100%", height = "50%"),
               br(),
-              h3("Introduction and Significance of project"),
+              h2("Introduction and Significance of project"),
               h4("Human Resources Analytics is an interesting dataset to explore. 
-                 Our goal is trying to understand why our best and most experienced employees are leaving the company prematurely.")
+                 Our goal is trying to understand why our best and most experienced employees are leaving the company prematurely., the projet will help to increase the effectiveness of human resource processes especially related to employee recruitment, and turnover. It will help the human resource team to forecast factors that might lead to employee attrition and plan ahead on filling these open positions. It will also help to identify the the factors that keep employees happy being in the organization as well as the reasons for employee attrition and the identification of employees at risk of leaving.
+Losing a key employee could hamper teams dynamics and finding the right employee could be costly and cumbersome"),
+h3("The idea behind this project is to examine the different factos that lead to attrition and come up with a model with a certain degree of accuracy that predicts if an employee is going to leave the company and the factors that are most reponsible for employee attrition")
               
              
       ),
@@ -848,9 +881,7 @@ ui <- dashboardPage(
       tabItem(tabName = "plot3", h2("Categorical variables"),
               # plot
               fluidRow(
-                #column(width = 4, plotlyOutput("plot19"), plotlyOutput("plot20"), plotlyOutput("plot21")),
-                #column(width = 4, plotlyOutput("plot22"), plotlyOutput("plot23"), plotlyOutput("plot24")),
-                #column(width = 4, plotlyOutput("plot25"), plotlyOutput("plot26"), plotlyOutput("plot27"))
+               
                 column(width = 6, plotOutput("com1"), plotOutput("com2"), plotOutput("com3")),
                 column(width = 6, plotOutput("com4"), plotOutput("com5"), plotOutput("com6")),
               column(width = 6, plotOutput("com7"),plotOutput("com8"),plotOutput("com9")),
@@ -869,10 +900,11 @@ ui <- dashboardPage(
                 
                 tabBox(
                   title = "Model Prediction", width = 12, side = "right",  
-                  # The id lets us use input$tabset1 on the server to find the current tab
+               
                   id = "tabset", height = "250px",
                   tabPanel("Logistic Regression", tableOutput("prediction_glm"), textOutput("mean_glm")),
-                  tabPanel("Extreme Gradient Bost", tableOutput("prediction_xgb"), textOutput("mean_xgb")),
+                  tabPanel("Extreme Gradient Boost", tableOutput("prediction_xgb"), textOutput("mean_xgb")),
+                   tabPanel("Extreme Gradient Boost tuned", tableOutput("prediction_xgb1"), textOutput("mean_xgb1")),
                   tabPanel("Random Forest", tableOutput("prediction_rf"), textOutput("mean_rf")),
                   tabPanel("Suport vector machine", tableOutput("prediction_svm"), textOutput("mean_svm")),
                     tabPanel("Linear Discriminant Model", tableOutput("prediction_lda"), textOutput("mean_lda"))
@@ -889,7 +921,21 @@ ui <- dashboardPage(
                   plotOutput("roc_curve")
                 )
               )
+         ),
+  
+  # FINDING TAB CONTENT
+tabItem(tabName = "finding", h2("Findings from the model prediction"),
+              # plot
+              fluidRow(
+                column(width = 10, plotlyOutput("find1"), plotlyOutput("find2"), plotlyOutput("find3")),
+                column(width = 10, plotlyOutput("find4"), plotlyOutput("find5"), plotlyOutput("fin6"))
+               
+              )
       )
+  
+  
+  
+  
     )
   )
 )
@@ -898,6 +944,9 @@ ui <- dashboardPage(
   
 ```
 
+```{r}
+
+```
 
 
 ```{r}
@@ -907,7 +956,22 @@ server <- function(input, output, session) {
   #Table information
   output$summary <- renderTable(
     {
-      
+      str1 = "Age of employee."
+    str2 = ""
+    str3 = ""
+    str4 = ""
+    str5 = ""
+    str6 = ""
+    str7 = ""
+    str8 = ""
+    str9 = ""
+    str10 = ""
+    
+    name = c("Age","Department", "Hourly Rate", 
+             "Job satisfaction", "Num of companies worked", "Performance rating", 
+             "Total working years", "Years in current role", "Daily rate", "Job role","Stockoption level","Attrition","Distance from Home", " JOb Involvement", " Marital Status", "Relationship satisfaction", " Training times least year", " YEars since last promorion", " Education field", " Monthly rate", "Years at company", "Business travel", " Education", "Environment satisfaction", " JOb Level", " Monthly income", " Over time", " Work life balance", " Years with current manager", " Gender", "Percentage Hike", " Employee Count", " Standard Hours","Employeenumber", "Over 18")
+    description = c(str1, str2, str3, str4, str5, str6, str7, str8, str9, str10)
+    table <- cbind("Variable Name"=name)
     }
   )
   
@@ -1059,58 +1123,100 @@ ggplot(hr_data, aes(JobRole,MonthlyIncome, fill= Attrition)) + geom_boxplot() +
 
   })
   
+  
+  
+  #Implication and finding plots
+  output$find1 <- renderPlotly({
+    ggplot(smote_train,aes(DistancefromHome,fill=Attrition)) +
+  geom_density(alpha=0.5) 
+  })
+  
+ 
+    output$find2 <- renderPlotly({
+  
+ggplot(smote_train,aes(x=JobRole,group=Attrition)) +
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage") + 
+        coord_flip()
+  
+
+    })
+    
+    
+     output$find3 <- renderPlotly({
+ggplot(smote_train, aes(overtime, fill = Attrition)) + geom_bar(stat= "count", position =  position_dodge()) 
+    })
+    
+     
+      output$find4 <- renderPlotly({
+
+ggplot(smote_train,aes(MonthlyIncome,fill=Attrition)) +
+  geom_density(alpha=0.5)
+    })
+    
+      
+       output$find5 <- renderPlotly({
+ggplot(smote_train,aes(OverallSatisfaction,fill=Attrition)) +
+  geom_density(alpha=0.5)
+    })
   #random forest
   set.seed(1337)
    #model_rf <- randomForest(as.factor(Attrition) ~., data = smote_trainrem, nsize = 20, ntree = 200)
-  #prediction_rf <- predict(model_rf, testData)
-  #cm_rf <- table(Truth = testData$Attrition, Pred = prediction_rf)
+  #prediction_rf <- predict(model_rf, smote_test)
+  #cm_rf <- table(Truth = smote_test$Attrition, Pred = prediction_rf)
   #table_rf <- getPerformanceTable("Random Forest", cm_rf)
   
-  cm_rf <- table(Truth = testData$Attrition, Prediction = Predictions_rf)
+  cm_rf <- table(Truth = smote_test$Attrition, Prediction = Predictions_rf)
   
   
   output$prediction_rf <- renderTable({ cm_rf })
-  output$mean_rf <- renderText({ paste("Accuracy: ", round(mean(Predictions_rf == testData$Attrition), digits = 3)) })
+  output$mean_rf <- renderText({ paste("Accuracy: ", round(mean(Predictions_rf == smote_test$Attrition), digits = 3)) })
   
   #logistic regressision
   
-  cm_glm <- table(Truth = testData$Attrition, Prediction = Predictions_glm)
+  cm_glm <- table(Truth = smote_test$Attrition, Prediction = Predictions_glm)
   
   
   output$prediction_glm <- renderTable({ cm_glm })
-  output$mean_glm <- renderText({ paste("Accuracy: ", round(mean(Predictions_glm == testData$Attrition), digits = 3)) })
+  output$mean_glm <- renderText({ paste("Accuracy: ", round(mean(Predictions_glm == smote_test$Attrition), digits = 3)) })
   
   #Extreme gradient boost
-  cm_xgb <- table(Truth = testData$Attrition, Prediction = Predictions_xgb)
+  cm_xgb <- table(Truth = smote_test$Attrition, Prediction = Predictions_xgb)
   
   
   output$prediction_xgb <- renderTable({ cm_xgb })
-  output$mean_xgb <- renderText({ paste("Accuracy: ", round(mean(Predictions_xgb == testData$Attrition), digits = 3)) })
+  output$mean_xgb <- renderText({ paste("Accuracy: ", round(mean(Predictions_xgb == smote_test$Attrition), digits = 3)) })
   
+   #Extreme gradient boost tuned
+  cm_xgb1 <- table(Truth = smote_test$Attrition, Prediction = Predictions_xgb1)
+  
+  
+  output$prediction_xgb1 <- renderTable({ cm_xgb1 })
+  output$mean_xgb1 <- renderText({ paste("Accuracy: ", round(mean(Predictions_xgb1 == smote_test$Attrition), digits = 3)) })
   
   #Support vector machine
   
-  cm_svm <- table(Truth = testData$Attrition, Prediction = Predictions_svm)
+  cm_svm <- table(Truth = smote_test$Attrition, Prediction = Predictions_svm)
   
   
   output$prediction_svm <- renderTable({ cm_svm })
-  output$mean_svm <- renderText({ paste("Accuracy: ", round(mean(Predictions_svm == testData$Attrition), digits = 3)) })
+  output$mean_svm <- renderText({ paste("Accuracy: ", round(mean(Predictions_svm == smote_test$Attrition), digits = 3)) })
   
   
   #Linear discriminant model 
   
-  cm_lda <- table(Truth = testData$Attrition, Prediction = Predictions_lda)
+  cm_lda <- table(Truth = smote_test$Attrition, Prediction = Predictions_lda)
   
   
   output$prediction_lda <- renderTable({ cm_lda })
-  output$mean_lda <- renderText({ paste("Accuracy: ", round(mean(Predictions_lda == testData$Attrition), digits = 3)) })
+  output$mean_lda <- renderText({ paste("Accuracy: ", round(mean(Predictions_lda == smote_test$Attrition), digits = 3)) })
 
   
   #MOdel performance.
   
     
     predict_rf_ROC <- Predictions_rf
-    pred_rf <- prediction(as.numeric(predict_rf_ROC), testData$Attrition)
+    pred_rf <- prediction(as.numeric(predict_rf_ROC), smote_test$Attrition)
       perf_rf <- performance(pred_rf, "tpr", "fpr")
 
       auc_rf <- performance(pred_rf,"auc")
@@ -1118,7 +1224,7 @@ ggplot(hr_data, aes(JobRole,MonthlyIncome, fill= Attrition)) + geom_boxplot() +
   
    
     predict_svm_ROC <- Predictions_svm
-    pred_svm <- prediction(as.numeric(predict_svm_ROC), testData$Attrition)
+    pred_svm <- prediction(as.numeric(predict_svm_ROC), smote_test$Attrition)
       perf_svm <- performance(pred_svm, "tpr", "fpr")
 
       auc_svm <- performance(pred_svm,"auc")
@@ -1126,7 +1232,7 @@ ggplot(hr_data, aes(JobRole,MonthlyIncome, fill= Attrition)) + geom_boxplot() +
   
    
     predict_glm_ROC <- Predictions_glm
-    pred_glm <- prediction(as.numeric(predict_glm_ROC), testData$Attrition)
+    pred_glm <- prediction(as.numeric(predict_glm_ROC), smote_test$Attrition)
       perf_glm <- performance(pred_glm, "tpr", "fpr")
 
       auc_glm <- performance(pred_glm,"auc")
@@ -1135,7 +1241,7 @@ ggplot(hr_data, aes(JobRole,MonthlyIncome, fill= Attrition)) + geom_boxplot() +
   
    
     predict_lda_ROC <- Predictions_lda
-    pred_lda <- prediction(as.numeric(predict_lda_ROC), testData$Attrition)
+    pred_lda <- prediction(as.numeric(predict_lda_ROC), smote_test$Attrition)
       perf_lda <- performance(pred_lda, "tpr", "fpr")
 
       auc_lda <- performance(pred_lda,"auc")
@@ -1144,24 +1250,33 @@ ggplot(hr_data, aes(JobRole,MonthlyIncome, fill= Attrition)) + geom_boxplot() +
   
   
   predict_xgb_ROC <- Predictions_xgb
-    pred_xgb <- prediction(as.numeric(predict_xgb_ROC), testData$Attrition)
+    pred_xgb <- prediction(as.numeric(predict_xgb_ROC), smote_test$Attrition)
       perf_xgb <- performance(pred_xgb, "tpr", "fpr")
 
       auc_xgb <- performance(pred_xgb,"auc")
   auc_xgb <- round(as.numeric(auc_xgb@y.values), 2)
+  
+  
+  predict_xgb1_ROC <- Predictions_xgb1
+    pred_xgb1 <- prediction(as.numeric(predict_xgb1_ROC), smote_test$Attrition)
+      perf_xgb1 <- performance(pred_xgb1, "tpr", "fpr")
+
+      auc_xgb1 <- performance(pred_xgb1,"auc")
+  auc_xgb1 <- round(as.numeric(auc_xgb1@y.values), 2)
   
     table_glm <- getPerformanceTable("Logistic regression", cm_glm)
     table_svm <- getPerformanceTable("Support vector machine", cm_svm)
   table_lda <- getPerformanceTable("Linear Discriminant analysis", cm_lda)
   table_rf <- getPerformanceTable("Random Forest", cm_rf)
   table_xgb <- getPerformanceTable("Extreme gradient boost", cm_xgb)
-  
+    table_xgb1 <- getPerformanceTable("Extreme gradient boost tuned", cm_xgb1)
+
   
   
   # accuracy
   output$accuracy <- renderTable({
-    auc <- rbind(auc_glm, auc_lda, auc_rf, auc_svm, auc_xgb)
-    accuracy <- rbind(table_glm, table_lda, table_rf, table_svm, table_xgb)
+    auc <- rbind(auc_glm, auc_lda, auc_rf, auc_svm, auc_xgb,auc_xgb1)
+    accuracy <- rbind(table_glm, table_lda, table_rf, table_svm, table_xgb, table_xgb1)
     cbind(accuracy, "AUC"=auc)
   })
   
@@ -1184,8 +1299,10 @@ ggplot(hr_data, aes(JobRole,MonthlyIncome, fill= Attrition)) + geom_boxplot() +
       output$model_dt <- renderPlot({
 varImpPlot(rf_varimportance)      
 
+        
   })
   
+      
   }
   
   
@@ -1193,4 +1310,51 @@ varImpPlot(rf_varimportance)
 shinyApp(ui, server)
 ```
 
-#The most important vaare 
+#The most important varaibles are 
+Job role
+Overtime
+Distance from home
+Monthly income
+Overall satisfaction
+
+
+
+#Implications
+Distance from Home
+```{r}
+
+ggplot(smote_train,aes(DistancefromHome,fill=Attrition)) +
+  geom_density(alpha=0.5) 
+```
+
+#Job Role
+```{r}
+job_att <-smote_train %>%
+  group_by(JobRole)%>%
+  summarize(attrition_rate=mean(Attrition=="Yes"))%>%
+  ggplot(aes(x=JobRole,y=attrition_rate), fill = 'JobRole') + geom_bar(stat='identity',alpha=0.5,fill='purple') +
+  coord_flip()
+
+job_att
+```
+
+#Overtime
+```{r}
+ggplot(smote_train, aes(overtime, fill = Attrition)) + geom_bar(stat= "count", position =  position_dodge()) 
+```
+```{r}
+
+ggplot(smote_train,aes(MonthlyIncome,fill=Attrition)) +
+  geom_density(alpha=0.5)
+```
+
+```{r}
+ggplot(smote_train,aes(OverallSatisfaction,fill=Attrition)) +
+  geom_density(alpha=0.5) 
+
+```
+
+```{r}
+ggplot(smote_train, aes(JobRole,fill = Attrition)) + geom_histogram(stat="count") + coord_flip()
+```
+
