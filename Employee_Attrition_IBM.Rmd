@@ -1,0 +1,1196 @@
+---
+title: "EmployeeAttritionIBM"
+output: html_notebook
+    
+---
+
+
+load packages
+```{r}
+library(tidyverse)
+library(caret)
+library(rpart)
+library(knitr) #Dynamic Report Generator including use of LateX, HTML
+library(gridExtra)
+library(corrplot)
+library(Boruta) #Feature selection
+library(randomForest) #Random forest
+library(ggRandomForests) #variable importance random forest
+library(DMwR) #BINARY CLASSIFICATION
+library(pROC) #ROC PLOT
+library(shinydashboard)
+library(shiny)
+library(readxl)
+library(plotly)
+library(ROCR)
+```
+
+Import and read data
+```{r}
+HR_Employee_Attrition_data <- read_excel("HR-Employee-Attrition-data.xlsx")
+hr_data <- as.data.frame(HR_Employee_Attrition_data)
+```
+
+Summary of the data
+```{r}
+head(hr_data)
+summary(hr_data)
+str(hr_data)
+sum(is.na(hr_data)) # check numbers of missing values
+```
+
+Looking at the dataset, there are too many variables and we might not need all. For example. We will exclude "Over 18", "Employee Count", "Standard Hours". Those variables are not informative and there is not variance in these variables 
+
+```{r}
+hr_data = hr_data[,!(names(hr_data) %in% c('Over 18','Employee Count','Standard Hours','Employee ID'))]
+str(hr_data)
+```
+
+Checking the attrition percentage
+```{r}
+Attrition_ppl <- nrow(hr_data[hr_data$`Attrition (Yes/No)` == 'Yes',])
+no_Attrition <- nrow(hr_data[hr_data$`Attrition (Yes/No)` == 'No',])
+str(Attrition_ppl)
+hr_data$Attrition <- hr_data$`Attrition (Yes/No)`
+(prop.table(table(hr_data$Attrition))*100)
+```
+Proceeding for Data Visualizing and Feature Extraction . Visualizing the different features will help to determine the features that might be important for our prediction. 
+
+Checking the attirition percentage of the IBM organisation
+```{r}
+hr_data$Attrition <- hr_data$`Attrition (Yes/No)`
+ggplot(hr_data, aes(Attrition)) + geom_bar()
+```
+In 1470 obervations of 31 variables, we see that about 84% of the population stayed at the organization and about 16% of the population left
+
+
+#Deparment and Attrition
+Visualizing the Department of the employee ad the Relationship to attrition
+
+```{r}
+table(hr_data$Department)
+ggplot(hr_data, aes(Attrition, fill = Department)) + geom_bar()
+# Most of the employees are from the Research and Development department
+
+```
+```{r}
+Dep_att <- hr_data %>%group_by(Department)%>%summarize(attrition_rate=mean(Attrition=="Yes"))%>% ggplot(aes(x=Department,y=attrition_rate,fill=Department)) + geom_bar(stat='identity', alpha = 0.5) 
+
+
+Dep_att
+
+```
+```{r}
+ggplot(hr_data, aes(Attrition, group=Department)) +
+  geom_bar(aes(y = ..prop.., fill= factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_grid(~Department) 
+```
+
+It is evident that from the visualized bar chart that Sales has a higher attriton rate.
+
+
+#Marital status and Attrition
+
+
+```{r}
+hr_data$MaritalStatus = hr_data$`Marital Status`
+mar_status <-hr_data %>% group_by(MaritalStatus)%>%
+  summarize(attrition_rate=mean(Attrition=="Yes"))%>%
+  ggplot(aes(x=MaritalStatus,y=attrition_rate,group=2)) + geom_line(stat='identity') +geom_point()
+
+mar_status
+```
+Attrition rate was far more for people who were single than married. Large people as compared to single persons might not necessarily leave the company. The marital status might be a weak predictor of attrition in this case. 
+
+
+## Attrition and Business Travel
+```{r}
+hr_data$BusinessTravel <- hr_data$`Business Travel`
+ggplot(hr_data, aes(BusinessTravel, fill = Attrition)) + geom_bar(stat= "count", position =  position_dodge()) 
+```
+We observe that there are more people in the organization who travels rarely as compared to those who travel frequently. It also appears that those who travel rarely might have a likelihood of staying in the organization, however the Business Travel Variable does not appear to be a significant predictor of attrition rate. 
+
+
+##Attrition and Gender
+```{r}
+ggplot(hr_data, aes(Gender, group= Attrition)) +
+  geom_bar(aes(y = ..prop.., fill= factor(..x..)), stat = "count") +
+  labs(y="Percentage", fill = "Gender") +
+  facet_grid(~Attrition)
+```
+
+
+
+The data visualization shows that there are more males than females in this organization. Gender is not significant in respective to attrition
+
+
+##Attrition and Age
+
+```{r}
+ggplot(hr_data, aes(Age, fill = Gender)) + 
+  geom_histogram(binwidth = 5) +
+  facet_grid(~Attrition)
+``` 
+It is seen from the data visualization that the median age of the organization between 30-40 years. Also 
+a the people who leave the organization are between 30-40 years old, likewise a significant number of people who doesnt leave the organization.
+
+#We will do a feature extraction of the age seperating the older people from the younger people.
+
+
+## Job Role and Attrition
+We know that work and stress levels might make an employee leave an organization, and that might depend on the job role. We want to visualize the job role and attrition to know the relationship between job roles and attrition. 
+
+```{r}
+hr_data$JobRole <- hr_data$`Job Role`
+job_att <-hr_data %>%
+  group_by(JobRole)%>%
+  summarize(attrition_rate=mean(Attrition=="Yes"))%>%
+  ggplot(aes(x=JobRole,y=attrition_rate)) + geom_bar(stat='identity',alpha=0.5,fill="purple") +
+  coord_flip()
+
+job_att
+```
+We see that the sales representatives have more attrition rate than any other department. The Stress level of the sales representative might make it a more likely factor of an employee leaving the organization.  It also seems that the managers and leaders have a lower attrition rate. 
+
+# We will extract features of Mangers and staff of the company
+
+
+##Attrition and Distance from Home
+The likelihood that an employee will leave an organization might likely depend on the distance to the office. If the distance is too far, the employee might be looking to leave. We wil visuaize the relationship between distance to home and attrition
+
+```{r}
+hr_data$DistancefromHome <- hr_data$`Distance From Home (kms)`
+ggplot(hr_data,aes(DistancefromHome,fill=Attrition)) +
+  geom_density(alpha=0.5) 
+  
+```
+There doesnt a great deal in people staying far away from the office. There are a number of people staying closer to the office, the attrition rate are quite lower for those who stay within 10km away from the office. For those who stay farther away from the office, the attriton rate is quite higher. 
+
+
+##Attrition and Payrates
+Visualzing the relationship between attrition and the different payrates using a boxplot. 
+```{r}
+hr_data$DailyRate <- hr_data$`Daily Rate (USD)`
+hr_data$HourlyRate <- hr_data$`Hourly Rate (USD)`
+hr_data$MonthlyRate <- hr_data$`Monthly Rate (USD)`
+hr_data$MonthlyIncome <- hr_data$`Monthly Income (USD)`
+  dr <- ggplot(hr_data,aes(Attrition,DailyRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+  hr <- ggplot(hr_data,aes(Attrition,HourlyRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+  mr <- ggplot(hr_data,aes(Attrition,MonthlyRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+  mi <- ggplot(hr_data,aes(Attrition,MonthlyIncome, fill = Attrition)) + geom_boxplot() + coord_flip()
+
+  #feature extraction of rates
+  hr_data$totalRate <- hr_data$DailyRate + hr_data$HourlyRate + hr_data$MonthlyRate
+
+  tr  <- ggplot(hr_data,aes(Attrition,totalRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+  
+  grid.arrange(dr,hr,mr,mi,tr,nrow = 5)
+
+  
+```
+The pay rates doesnt give much information on the attriton rate. There is no much significant mean difference in the totalrate as well.
+#Other than the daily rate, attrition is present for those with lower rate and monthly income
+
+#Monthly income and Job roles 
+Sales representatives employees tend to leave the organization most. We want to visualize the relationship between the monthly income and the job roles(Which Job is least paying?)
+
+```{r}
+ggplot(hr_data, aes(JobRole,MonthlyIncome, fill= Attrition)) + geom_boxplot() + 
+  coord_flip()
+  
+```
+we can see that Sales Representatives, Research Scientists and Labouratory Technicians are the lower job levels based on monthly income. The mean of those who leave is less than those who do not. 
+
+
+##Correlation analysis 
+Visualizing the correlation between numerical variables, and checking for colinearity.
+
+```{r}
+str(hr_data)
+hr_data$Numcompworked <- hr_data$`No. of Companies Worked`
+hr_data$Yearsatcompany <- hr_data$`Years At Company`
+hr_data$Yearsincurrentrole <- hr_data$`Years In Current Role`
+hr_data$Yearswithcurrmanager <- hr_data$`Years With Curr Manager`
+hr_data$Yearssincelastpromotion <- hr_data$`Years Since Last Promotion`
+hr_data$totalworkingyears <- hr_data$`Total Working Years`
+hr_data$trainingtimeslastyear <- hr_data$`Training Times Last Year`
+hr_data$stockoptionlevel <- hr_data$`Stock Option Level`
+hr_data$salaryhike <- hr_data$`Salary Hike (%)`
+data_corr = hr_data %>% 
+  dplyr::select(Age,DailyRate,DistancefromHome,HourlyRate,MonthlyIncome,MonthlyRate, Numcompworked,salaryhike,Yearsatcompany,Yearsincurrentrole,Yearssincelastpromotion,Yearswithcurrmanager,totalworkingyears,trainingtimeslastyear,stockoptionlevel)
+
+corrplot(cor(data_corr), method = "square", type="upper")
+```
+
+From the correlation plot, we observe correlated features. We will exclude the variables that are correlated from the model. (Colinearity). The correlated variables are:
+Age and total working years
+Total working years and monthly income
+Years with current manager and years at company
+Years with current current manager and years in current role
+
+# The variables we will exclude are Years with current manager and total working years 
+
+
+##Attrition and Salary Hike
+
+Visualizing salary hike and attrition
+```{r}
+ggplot(hr_data,aes(salaryhike, fill = Attrition)) + geom_histogram(binwidth =  5) 
+#Salary Hike and Years at company
+ggplot(hr_data,aes(Yearsatcompany,salaryhike,col=(Attrition),size = salaryhike)) +geom_point(alpha = 0.5)
+
+
+#Salary Hike and Years at experience
+#ggplot(hr_data,aes(totalworkingyears,salaryhike,col=(Attrition),colour = salaryhike))+ geom_point(alpha = 0.5)
+
+```
+From the data visualization, we can see that there is no linear relationship between totalworkingyears 
+
+##Attrition and Education
+Visualizing attrition rate and education levels and fields
+```{r}
+hr_data$educationfield <- hr_data$`Education Field`
+ggplot(hr_data,aes(Education, fill = Attrition)) +geom_bar() + facet_grid(~educationfield) 
+```
+EMployees mith a life sciences and medical education level seems more populated in the organization. There also seems more people with a bachelor degree in the organization. However educational background might not be related to attrition levels
+
+
+##Attrition and categorical variables.
+
+
+
+#Attrition and JOb Satisfaction * Years with current manager
+```{r}
+hr_data$jobsatisfaction <- hr_data$`Job Satisfaction`
+hr_data$jobinvolvement <- hr_data$`Job Involvement`
+hr_data$relationshipsatisfaction <- hr_data$`Relationship Satisfaction`
+hr_data$worklifebalance <- hr_data$`Work Life Balance`
+hr_data$environmentsatisfaction <- hr_data$`Environment Satisfaction`
+hr_data$overtime <- hr_data$`Over Time`
+hr_data$performancerating <- hr_data$`Performance Rating`
+
+ggplot(hr_data,aes(x=jobsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=jobinvolvement,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=relationshipsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..)),position = position_dodge()) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=performancerating,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=environmentsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=overtime,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+ggplot(hr_data,aes(x=worklifebalance,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+
+```
+We observe that people with low job satisfaction have higher attrition rate. Also it appears that people with high job satisfication tend to leave the company, however in people who do not leave. those who have very high job satisfaction then to stay.
+
+Employees with higher job involvement tend to leave more, however people with high job invovlemnt have also reported no attrition rate
+
+High relationship satisfaction have also reported staying as well as almost the same number of people have reported leaving
+
+
+
+## Feature extraction
+Feature engineering from the variables. 
+For age, we want to divide the age into 3 groups. 
+
+```{r}
+hr_data$AgeGroup <- as.factor(ifelse(hr_data$Age <= 25, "Young", ifelse(hr_data$Age<=50, "Middle Age", "Adult")))
+
+table(hr_data$AgeGroup,hr_data$Attrition)
+
+ggplot(hr_data,aes(x=Attrition,group=AgeGroup))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Agegroup") +
+  facet_wrap(~AgeGroup)
+
+ggplot(hr_data,aes(x=AgeGroup,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+```
+
+We can conclude that majority of the employees in the organization are middle aged. Also young people below 25 years tend to leave more. 
+
+#Age group and work-life balance
+
+
+
+```{r}
+
+
+age_work <- hr_data%>%group_by(AgeGroup,worklifebalance)%>%summarize(attrition_rate=mean(Attrition=="Yes")) %>%
+ggplot(aes(x=AgeGroup,y=attrition_rate,fill=worklifebalance)) + geom_bar(stat="identity",position = position_dodge()) 
+age_work
+```
+```{r}
+#Agegroup and monthly income by (department,job class)
+
+#
+```
+
+Adult have the lowest attrition rate in percentage and it appears they have the the lowest reported bad work-life balance. Young people have the highest reported bad work-life environment. Probably that is why they leave more.
+##Total Satisfaction
+```{r}
+hr_data$environmentsatisfaction[hr_data$environmentsatisfaction=="Low"] <- 1
+hr_data$environmentsatisfaction[hr_data$environmentsatisfaction=="Medium"] <- 2
+hr_data$environmentsatisfaction[hr_data$environmentsatisfaction=="High"] <- 3
+hr_data$environmentsatisfaction[hr_data$environmentsatisfaction=="Very High"] <- 4
+str(hr_data$environmentsatisfaction)
+
+hr_data$jobsatisfaction[hr_data$jobsatisfaction=="Low"] <- 1
+hr_data$jobsatisfaction[hr_data$jobsatisfaction=="Medium"] <- 2
+hr_data$jobsatisfaction[hr_data$jobsatisfaction=="High"] <- 3
+hr_data$jobsatisfaction[hr_data$jobsatisfaction=="Very High"] <- 4
+str(hr_data$jobsatisfaction)
+
+hr_data$relationshipsatisfaction[hr_data$relationshipsatisfaction=="Low"] <- 1
+hr_data$relationshipsatisfaction[hr_data$relationshipsatisfaction=="Medium"] <- 2
+hr_data$relationshipsatisfaction[hr_data$relationshipsatisfaction=="High"] <- 3
+hr_data$relationshipsatisfaction[hr_data$relationshipsatisfaction=="Very High"] <- 4
+str(hr_data$relationshipsatisfaction)
+
+hr_data$jobinvolvement[hr_data$jobinvolvement=="Low"] <- 1
+hr_data$jobinvolvement[hr_data$jobinvolvement=="Medium"] <- 2
+hr_data$jobinvolvement[hr_data$jobinvolvement=="High"] <- 3
+hr_data$jobinvolvement[hr_data$jobinvolvement=="Very High"] <- 4
+str(hr_data$jobinvolvement)
+
+hr_data$worklifebalance[hr_data$worklifebalance=="Bad"] <- 1
+hr_data$worklifebalance[hr_data$worklifebalance=="Good"] <- 2
+hr_data$worklifebalance[hr_data$worklifebalance=="Better"] <- 3
+hr_data$worklifebalance[hr_data$worklifebalance=="Best"] <- 4
+str(hr_data$worklifebalance)
+
+hr_data$OverallSatisfaction <- as.numeric(hr_data$environmentsatisfaction) + as.numeric(hr_data$jobsatisfaction) + as.numeric(hr_data$relationshipsatisfaction) + as.numeric(hr_data$jobinvolvement)
+
+str(hr_data$OverallSatisfaction)
+summary(hr_data$OverallSatisfaction)
+
+hr_data$OverallSatisfactionlevel <- as.factor(ifelse (hr_data$OverallSatisfaction < ave(hr_data$OverallSatisfaction), "Low", "High"))
+table(hr_data$OverallSatisfactionlevel,hr_data$Attrition)
+```
+
+```{r}
+hr_data$jobclass <- hr_data$JobRole
+directors <- c( 'Sales Executive', 'Manager','Research Director','Manufacturing Director')
+staffs <- c('Research Scientist', 'Sales Representative', 'Laboratory Technician','Healthcare Representative','Human Resources')
+
+hr_data$jobclass[hr_data$jobclass %in% directors]  <- 'Directors'
+hr_data$jobclass[hr_data$jobclass %in% staffs]  <- 'Staff'
+
+table(hr_data$jobclass)
+
+ggplot(hr_data,aes(x=Attrition,group=jobclass))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Job Class") +
+  facet_wrap(~jobclass)
+
+
+```
+
+As expected the staff of the company tend to leave more than the directors of the organization.
+
+
+```{r}
+ggplot(hr_data, aes(jobclass, fill = jobinvolvement)) + geom_bar(stat= "count", position =  position_dodge()) + facet_wrap(~Attrition) 
+
+ggplot(hr_data,aes(x=jobinvolvement,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "JOb Involvement") +
+  facet_wrap(~jobclass)
+
+
+
+```
+
+The staffs have more job involvement than the directors. It appears that the with more job involvement, the employee is more likely to leave the organization. 
+
+```{r}
+
+ggplot(hr_data, aes(jobclass, fill = jobsatisfaction)) + geom_bar(stat= "count", position =  position_dodge()) + facet_wrap(~Attrition) 
+
+
+
+
+```
+It appears that the staffs are more satisfied with their jobs than the directors and the job satisfaction is not necessarily the factor that the staffs are leaving the organization. 
+
+
+
+```{r}
+#Income level
+hr_data$Incomelevel <- as.factor(ifelse (hr_data$MonthlyIncome < ave(hr_data$MonthlyIncome), "Low", "High"))
+table(hr_data$Incomelevel, hr_data$Attrition)
+```
+# Years without employee change
+
+
+```{r}
+hr_data$Yearswithoutchange <- hr_data$Yearsincurrentrole - hr_data$Yearssincelastpromotion
+str(hr_data$Yearswithoutchange)
+```
+
+## Data modeling
+
+#Divide the data into training and test dataset.
+
+
+Data Preprocessing
+Convert characters to factors and remove 
+```{r}
+hr_dataclean <- hr_data
+hr_dataclean = hr_dataclean[,!(names(hr_dataclean) %in% c('Marital Status','Job Role','Attrition (Yes/No)','Marital Status','Education Field','Business Travel','Job Involvement','Job Satisfaction','Job Level','Hourly Rate (USD)','Daily Rate (USD)','Monthly Rate (USD)','Monthly Income (USD)','Salary Hike (%)','Stock Option Level','Over Time','No. of Companies Worked','Total Working Years','Years At Company','Years In Current Role','Years Since Last Promotion','Years With Curr Manager','Environment Satisfaction','Training Times Last Year','Work Life Balance','Performance Rating','Relationship Satisfaction','Distance From Home (kms)'))]
+
+```
+```{r}
+hr_dataclean$Department <- as.factor(hr_dataclean$Department)
+hr_dataclean$Education <- as.factor(hr_dataclean$Education)
+hr_dataclean$Attrition <- as.factor(hr_dataclean$Attrition)
+hr_dataclean$MaritalStatus <- as.factor(hr_dataclean$MaritalStatus)
+hr_dataclean$BusinessTravel <- as.factor(hr_dataclean$BusinessTravel)
+hr_dataclean$JobRole <- as.factor(hr_dataclean$JobRole)
+hr_dataclean$educationfield <- as.factor(hr_dataclean$educationfield)
+hr_dataclean$jobsatisfaction <- as.factor(hr_dataclean$jobsatisfaction)
+hr_dataclean$jobinvolvement <- as.factor(hr_dataclean$jobinvolvement)
+hr_dataclean$relationshipsatisfaction <- as.factor(hr_dataclean$relationshipsatisfaction)
+hr_dataclean$worklifebalance <- as.factor(hr_dataclean$worklifebalance)
+hr_dataclean$environmentsatisfaction <- as.factor(hr_dataclean$environmentsatisfaction)
+hr_dataclean$overtime <- as.factor(hr_dataclean$overtime)
+hr_dataclean$performancerating <- as.factor(hr_dataclean$performancerating)
+hr_dataclean$jobclass <- as.factor(hr_dataclean$jobclass)
+hr_dataclean$Gender <- as.factor(hr_dataclean$Gender)
+
+str(hr_dataclean)
+```
+#Partitioning the dataset
+```{r}
+#Divide the data into training and test dataset.
+trainIndex <- createDataPartition(hr_dataclean$Attrition, p = 0.7, list = FALSE)
+trainData <- hr_dataclean[trainIndex,]
+testData  <- hr_dataclean[-trainIndex,]
+```
+
+#uSING THE SMOTE METHOD TO balance classification
+
+The data(Attrition is unbalanced)
+
+```{r}
+prop.table(table(hr_data$Attrition))*100
+trainData <- as.data.frame(trainData)
+smote_train <- SMOTE(Attrition ~ .,data=trainData)
+balanced_data =  prop.table(table(smote_train$Attrition))*100
+cat("Balanced proportions is"); print(balanced_data, row.names=FALSE)
+
+
+```
+The unbalanced data showed that 84% stayed as compared to 16% who left the organization, however doing a binary classification has balanced the data set and now we have 57% who did not leave as compared to 43% who left.
+
+We will proceed to feature selection using the Boruta package. We can also use the lime package, but in this notebook, we will use the Boruta package. 
+
+
+#Feature selection using Boruta
+
+```{r}
+set.seed(1337)
+boruta_output=Boruta(Attrition~.,data=smote_train,doTrace=2)
+print(boruta_output)
+
+```
+#Tentative feature
+
+Print out the new important features and display the boruta plot
+
+```{r}
+#boruta_train <- TentativeRoughFix(boruta_output)
+
+
+#cat("New important features", getSelectedAttributes(boruta_train), sep = "\n")
+plot(boruta_output, cex.axis=.7, las=2, xlab=" ", main="Variable Importance")
+
+```
+Display the boruta output statistics
+```{r}
+boruta_stat <- attStats(boruta_output)
+print(boruta_stat)
+
+```
+
+
+
+Removing unwanted features
+```{r}
+set.seed(1337)
+smote_trainrem = smote_train[,!(names(smote_train) %in% c("Gender", "performancerating"))]
+
+
+```
+
+```{r}
+set.seed(1337)
+library(randomForest)
+rf_varimportance <- randomForest(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome +  Numcompworked + Yearsatcompany +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange, smote_trainrem, importance=TRUE,ntree=500)
+
+```
+
+
+
+
+
+##Model fitting
+
+#basic Parameter tuning-Cross Validation
+
+```{r}
+set.seed(1337)
+trainControl <- trainControl(method = "cv", repeats = 10)
+
+#Using the full dataset while ignoring the feature selection
+
+##Logistic Regression
+fit_glm <- train(Attrition~. ,method="rf", data = smote_train, trControl = trainControl)
+
+confusionMatrix(fit_glm)
+
+```
+
+Removing unimportant features
+```{r}
+
+#Logistic regression
+fit_glm1 <- train(Attrition~. ,method="rf", data = smote_trainrem, trControl = trainControl)
+
+confusionMatrix(fit_glm1)
+
+
+```
+
+
+
+
+##removing the correlated variables
+
+
+#Random Forest
+
+```{r}
+# Removing total working years, years with current manager, years in current role
+
+set.seed(1337)
+model_rf <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + Numcompworked + Yearsatcompany + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange, method = "rf", data = smote_trainrem, trControl = trainControl)
+ confusionMatrix(model_rf)
+```
+
+#Support vector machine
+
+```{r}
+set.seed(1337)
+model_svm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + Numcompworked + Yearsatcompany + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange, method = "svmRadial", data = smote_trainrem, trControl = trainControl)
+ confusionMatrix(model_svm)
+```
+
+#Logistic regression
+
+```{r}
+set.seed(1337)
+model_glm <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome +  Numcompworked + Yearsatcompany  + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange , method = "glm", data = smote_trainrem, trControl = trainControl, family = binomial(logit))
+ confusionMatrix(model_glm)
+```
+
+Extreme Gradient Boost
+```{r}
+library(xgboost)
+set.seed(1337)
+model_xgb <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome +  Numcompworked + Yearsatcompany +  Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange, method = "xgbTree", data = smote_trainrem, trControl = trainControl)
+ confusionMatrix(model_xgb)
+```
+
+
+```{r}
+varImp(model_xgb)
+importance <- varImp(model_xgb)
+varImportance <- data.frame(Variables = row.names(importance[[1]]), 
+                            Importance = round(importance[[1]]$Overall,2))
+
+rankImportance <- varImportance %>%
+          mutate(Rank = paste0('Number',dense_rank(desc(Importance))))
+          ggplot(rankImportance, aes(x = reorder(Variables, Importance), y = Importance)) +
+          geom_bar(stat='identity',fill = "red") +
+        labs(x = 'Variables', title = 'Relative Variable Importance') +
+        coord_flip()
+
+
+
+
+
+```
+
+
+
+
+
+# Linear discriminant analysis
+
+```{r}
+set.seed(1337)
+model_lda <- train(Attrition ~ Department + Age + Education + MaritalStatus + BusinessTravel + JobRole + DistancefromHome + DailyRate + HourlyRate + MonthlyRate + MonthlyIncome + Numcompworked + Yearsatcompany + Yearssincelastpromotion +  trainingtimeslastyear + stockoptionlevel + salaryhike + educationfield + jobsatisfaction + jobinvolvement + relationshipsatisfaction + worklifebalance + environmentsatisfaction + overtime + AgeGroup + OverallSatisfaction + OverallSatisfactionlevel + jobclass + Incomelevel + Yearswithoutchange, method = "lda", data = smote_trainrem, trControl = trainControl)
+ confusionMatrix(model_lda)
+
+
+```
+
+Predictions
+
+`
+```{r}
+set.seed(1337)
+Predictions_rf <- predict(model_rf, testData)
+confusionMatrix(Predictions_rf, testData$Attrition)
+```
+
+
+```{r}
+set.seed(1337)
+Predictions_glm <- predict(model_glm, testData)
+
+confusionMatrix(Predictions_glm, testData$Attrition)
+```
+
+```{r}
+set.seed(1337)
+Predictions_svm <- predict(model_svm,testData)
+
+confusionMatrix(Predictions_svm, testData$Attrition)
+```
+
+```{r}
+Predictions_xgb <- predict(model_xgb, testData)
+
+confusionMatrix(Predictions_xgb, testData$Attrition)
+```
+
+```{r}
+set.seed(1337)
+Predictions_lda <- predict(model_lda,testData)
+
+confusionMatrix(Predictions_lda, testData$Attrition)
+```
+
+
+
+
+#```{r}
+
+roc_rf <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_rf))
+roc_rf$auc
+
+roc_svm <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_svm))
+roc_svm$auc
+
+roc_xgb <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_xgb))
+roc_xgb$auc
+
+roc_lda <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_lda))
+roc_lda$auc
+
+roc_glm <- roc(as.numeric(testData$Attrition), as.numeric(Predictions_glm))
+roc_glm$auc
+
+
+
+
+```
+#```{r}
+plot(roc_rf, ylim = c(0,1), main = "ROC curves", col = "blue")
+plot(roc_glm, ylim = c(0,1),  col = "green", add = T)
+plot(roc_lda, ylim = c(0,1),   col = "yellow", add = T)
+plot(roc_svm, ylim = c(0,1),   col = "burlywood", add = T)
+plot(roc_xgb, ylim = c(0,1),  col = "purple", add = T)
+
+
+```
+
+
+
+```{r}
+
+getPerformanceTable <- function(model, matrix) {
+  sensitivity <- round(matrix[4] / (matrix[4] + matrix[1]), digits = 2)
+  specificity <- round(matrix[2] / (matrix[2] + matrix[3]), digits = 2)
+  #precision <- round(matrix[4] / (matrix[4] + matrix[3]), digits = 2)
+  #f1 <- round(2*precision*sensitivity / (precision+sensitivity), digits = 2)
+  #recall <- sensitivity
+  performanceTable <- data.frame(Model = model, Sensitivity = sensitivity, Specificity = specificity)
+#performanceTable <- data.frame(Model = model, Sensitivity = sensitivity, Specificity = specificity, 
+                       # Precision = precision, Recall = recall, F1 = f1)
+  return(performanceTable)
+}
+```
+
+
+
+
+
+
+## ui  
+`
+
+```{r}
+## ui  
+ui <- dashboardPage(
+  skin = "blue", 
+  # Header content
+  dashboardHeader(title = "Human Resources Analytics", titleWidth = 300),
+  # Sidebar content
+  dashboardSidebar(
+    sidebarMenu(
+      menuItem("About Project", tabName = "about", icon = icon("user")),
+      menuItem("Data Information", tabName = "info", icon = icon("info-circle")),
+      
+      menuItem("Exploratory Data Analysis", tabName = "plot", icon = icon("bar-chart"), startExpanded = TRUE, 
+         menuSubItem("Exploratory Data Analysis(1)", tabName = "plot1"), menuSubItem("Exploratory Data Analysis(2)", tabName = "plot2"), menuSubItem("Exploratory Data Analysis(3)", tabName = "plot3")),
+      
+      menuItem("Model Prediction", tabName = "model", icon = icon("check")),
+      
+      menuItem(" Reference Source Code", href = "https://github.com/tammykan/Human-Resources-Analytics", icon = icon("code"))
+    )
+  ),
+  
+  # Body content
+  dashboardBody(
+    # Load D3.js
+    tags$head(tags$script(src = 'http://d3js.org/d3.v3.min.js')),
+    
+    tabItems(
+      # about tab content
+      tabItem(tabName = "about",
+              h1("Human Resources Analytics"),
+              p("Foudations of Informatics for Practice"),
+              img(src="http://www.thecareermuse.co.in/wp-content/uploads/2017/09/Human-Resource-Planning-560x315.jpg", width = "100%", height = "50%"),
+              br(),
+              h3("Introduction and Significance of project"),
+              h4("Human Resources Analytics is an interesting dataset to explore. 
+                 Our goal is trying to understand why our best and most experienced employees are leaving the company prematurely.")
+              
+             
+      ),
+      
+      # information tab content
+      tabItem(tabName = "info",
+              # information
+              fluidRow(
+                h1("Data Dictionary"),
+                box(
+                  title = "Variables Information", status = "success", width = 12, 
+                  solidHeader = TRUE, collapsible = TRUE, 
+                  tableOutput("summary")
+                ),
+                box(
+                  title = "Employee Information", status = "success", width = 12, 
+                  solidHeader = TRUE, collapsible = TRUE, 
+                  h5(paste("The Total Number of employee: ", nrow(hr_data))),
+                  h5(paste("The Number of employee who left the company: ", Attrition_ppl)),
+                  h5(paste("The Number of employee who didn't leave the company: ", no_Attrition)),
+                  h5(paste("The percentage of of employees who left: ", round((Attrition_ppl/nrow(hr_data)*100), digits = 1)) )
+                ),
+                box(
+                  title = "Correlation Plot", status = "success", width = 12, 
+                  solidHeader = TRUE, collapsible = TRUE, 
+                  plotOutput("corrplot")
+                )
+              )
+      ),
+      
+      # plot tab content
+      tabItem(tabName = "plot1", h2("Bar charts and histograms"),
+              # plot
+              fluidRow(
+                column(width = 4, plotlyOutput("plot1"), plotlyOutput("plot2"), plotlyOutput("plot3")),
+                column(width = 4, plotlyOutput("plot4"), plotlyOutput("plot5"), plotlyOutput("plot6")),
+                column(width = 4, plotlyOutput("plot7"), plotlyOutput("plot8"), plotlyOutput("plot9"))
+                
+              )
+      ),
+      
+      tabItem(tabName = "plot2", h2("Box plot and Scatter Plots"),
+              # plot
+              fluidRow(
+                column(width = 10, plotlyOutput("plot10"), plotlyOutput("plot11"), plotlyOutput("plot12")),
+                column(width = 10, plotlyOutput("plot13"), plotlyOutput("plot14"), plotlyOutput("plot15")),
+                column(width = 10,  plotlyOutput("plot16"), plotlyOutput("plot17"), plotlyOutput("plot18"))
+              )
+      ),
+      
+      tabItem(tabName = "plot3", h2("Categorical variables"),
+              # plot
+              fluidRow(
+                #column(width = 4, plotlyOutput("plot19"), plotlyOutput("plot20"), plotlyOutput("plot21")),
+                #column(width = 4, plotlyOutput("plot22"), plotlyOutput("plot23"), plotlyOutput("plot24")),
+                #column(width = 4, plotlyOutput("plot25"), plotlyOutput("plot26"), plotlyOutput("plot27"))
+                column(width = 6, plotOutput("com1"), plotOutput("com2"), plotOutput("com3")),
+                column(width = 6, plotOutput("com4"), plotOutput("com5"), plotOutput("com6")),
+              column(width = 6, plotOutput("com7"),plotOutput("com8"),plotOutput("com9")),
+  column(width = 6, plotOutput("com10"),plotOutput("com11"),plotOutput("com12"),plotOutput("com13"))
+       )         
+              
+      ),
+      
+      # model tab content
+      tabItem(tabName = "model",
+              fluidRow(
+                box(
+                  width = 12, title = "Model variable importance", 
+                  plotOutput("model_dt")
+                ),
+                
+                tabBox(
+                  title = "Model Prediction", width = 12, side = "right",  
+                  # The id lets us use input$tabset1 on the server to find the current tab
+                  id = "tabset", height = "250px",
+                  tabPanel("Logistic Regression", tableOutput("prediction_glm"), textOutput("mean_glm")),
+                  tabPanel("Extreme Gradient Bost", tableOutput("prediction_xgb"), textOutput("mean_xgb")),
+                  tabPanel("Random Forest", tableOutput("prediction_rf"), textOutput("mean_rf")),
+                  tabPanel("Suport vector machine", tableOutput("prediction_svm"), textOutput("mean_svm")),
+                    tabPanel("Linear Discriminant Model", tableOutput("prediction_lda"), textOutput("mean_lda"))
+
+                ),
+                
+                box(
+                  title = "Model Performance", status = "primary", width = 12,
+                  tableOutput("accuracy")
+                ),
+                
+                box(
+                  title = "ROC Curve", status = "primary", width = 12,
+                  plotOutput("roc_curve")
+                )
+              )
+      )
+    )
+  )
+)
+
+
+  
+```
+
+
+
+```{r}
+## server
+server <- function(input, output, session) {
+  
+  #Table information
+  output$summary <- renderTable(
+    {
+      
+    }
+  )
+  
+#Plots
+  output$plot1 <- renderPlotly({
+    ggplot(hr_data, aes(Attrition)) + geom_bar(stat = "count") + ggtitle("Attrition rate")
+    
+  }
+  )
+   
+  
+   output$plot2 <- renderPlotly({
+     ggplot(hr_data, aes(Attrition, group=Department)) +
+  geom_bar(aes(y = ..prop.., fill= factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_grid(~Department) + ggtitle("Attrition by deparment")
+   }
+  )
+  
+      output$plot3 <- renderPlotly({
+        ggplot(hr_data, aes(BusinessTravel, fill = Attrition)) + geom_bar(stat= "count", position =  position_dodge()) + ggtitle("Attrition by business travel")
+})
+
+
+            output$plot4 <- renderPlotly({
+              ggplot(hr_data, aes(Gender, group= Attrition)) +
+  geom_bar(aes(y = ..prop.., fill= factor(..x..)), stat = "count") +
+  labs(y="Percentage", fill = "Gender") +
+  facet_grid(~Attrition) + ggtitle("Attrition by gender")
+})
+         
+              output$plot5 <- renderPlotly({
+              ggplot(hr_data, aes(Age, fill = Gender)) + 
+  geom_histogram(binwidth = 5) +
+  facet_grid(~Attrition) + ggtitle("Attrition by age")
+                })
+
+             output$plot6 <- renderPlotly({
+               ggplot(hr_data,aes(DistancefromHome,fill=Attrition)) +
+  geom_density(alpha=0.5)
+})
+            output$plot7 <- renderPlotly({
+              ggplot(hr_data,aes(Education, fill = Attrition)) +geom_bar() + facet_grid(~educationfield) 
+
+})
+             
+    
+             
+    output$plot10 <- renderPlotly({
+   ggplot(hr_data,aes(Attrition,DailyRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+      
+    })
+   
+       output$plot11 <- renderPlotly({
+         ggplot(hr_data,aes(Attrition,MonthlyRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+})
+     output$plot12 <- renderPlotly({
+      ggplot(hr_data,aes(Attrition,MonthlyIncome, fill = Attrition)) + geom_boxplot() + coord_flip()
+
+})
+
+ h2("Job role and attrition")
+   output$plot13 <- renderPlotly({
+ggplot(hr_data, aes(JobRole,MonthlyIncome, fill= Attrition)) + geom_boxplot() + 
+  coord_flip()
+   })
+
+      output$plot14 <- renderPlotly({
+        ggplot(hr_data,aes(Yearsatcompany,salaryhike,col=(Attrition),size = salaryhike)) +geom_point(alpha = 0.5)
+
+})
+  output$com1 <- renderPlot({
+    ggplot(hr_data,aes(x=jobsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+    
+})
+  
+        output$com2 <- renderPlot({
+          ggplot(hr_data,aes(x=jobinvolvement,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+})
+          output$com3 <- renderPlot({
+                ggplot(hr_data,aes(x=relationshipsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..)),position = position_dodge()) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)  
+                })
+
+                  output$com4 <- renderPlot({
+                    ggplot(hr_data,aes(x=performancerating,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+                  })
+                  
+            output$com5 <- renderPlot({
+              ggplot(hr_data,aes(x=environmentsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+            })
+            output$com6 <- renderPlot({
+              
+             ggplot(hr_data,aes(x=overtime,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition) 
+            })
+            
+            output$com7 <- renderPlot({
+  ggplot(hr_data,aes(x=worklifebalance,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+            })
+            
+           output$com9 <- renderPlot({
+             ggplot(hr_data,aes(x=AgeGroup,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+             
+})
+             output$com10 <- renderPlot({
+             ggplot(hr_data,aes(x=Attrition,group=jobclass))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Job Class") +
+  facet_wrap(~jobclass)
+})
+              output$com11 <- renderPlot({
+             ggplot(hr_data, aes(jobclass, fill = jobsatisfaction)) + geom_bar(stat= "count", position =  position_dodge()) + facet_wrap(~Attrition) 
+})
+               output$com12 <- renderPlot({
+             ggplot(hr_data, aes(jobclass, fill = jobinvolvement)) + geom_bar(stat= "count", position =  position_dodge()) + facet_wrap(~Attrition) 
+
+})
+                output$com13 <- renderPlot({
+             ggplot(hr_data, aes(jobclass, fill = jobsatisfaction)) + geom_bar(stat= "count", position =  position_dodge()) + facet_wrap(~Attrition) 
+})
+                 
+      
+   #correlation plot  
+  output$corrplot <- renderPlot({
+    corrplot(cor(data_corr), method = "circle")
+
+  })
+  
+  #random forest
+  set.seed(1337)
+   #model_rf <- randomForest(as.factor(Attrition) ~., data = smote_trainrem, nsize = 20, ntree = 200)
+  #prediction_rf <- predict(model_rf, testData)
+  #cm_rf <- table(Truth = testData$Attrition, Pred = prediction_rf)
+  #table_rf <- getPerformanceTable("Random Forest", cm_rf)
+  
+  cm_rf <- table(Truth = testData$Attrition, Prediction = Predictions_rf)
+  
+  
+  output$prediction_rf <- renderTable({ cm_rf })
+  output$mean_rf <- renderText({ paste("Accuracy: ", round(mean(Predictions_rf == testData$Attrition), digits = 3)) })
+  
+  #logistic regressision
+  
+  cm_glm <- table(Truth = testData$Attrition, Prediction = Predictions_glm)
+  
+  
+  output$prediction_glm <- renderTable({ cm_glm })
+  output$mean_glm <- renderText({ paste("Accuracy: ", round(mean(Predictions_glm == testData$Attrition), digits = 3)) })
+  
+  #Extreme gradient boost
+  cm_xgb <- table(Truth = testData$Attrition, Prediction = Predictions_xgb)
+  
+  
+  output$prediction_xgb <- renderTable({ cm_xgb })
+  output$mean_xgb <- renderText({ paste("Accuracy: ", round(mean(Predictions_xgb == testData$Attrition), digits = 3)) })
+  
+  
+  #Support vector machine
+  
+  cm_svm <- table(Truth = testData$Attrition, Prediction = Predictions_svm)
+  
+  
+  output$prediction_svm <- renderTable({ cm_svm })
+  output$mean_svm <- renderText({ paste("Accuracy: ", round(mean(Predictions_svm == testData$Attrition), digits = 3)) })
+  
+  
+  #Linear discriminant model 
+  
+  cm_lda <- table(Truth = testData$Attrition, Prediction = Predictions_lda)
+  
+  
+  output$prediction_lda <- renderTable({ cm_lda })
+  output$mean_lda <- renderText({ paste("Accuracy: ", round(mean(Predictions_lda == testData$Attrition), digits = 3)) })
+
+  
+  #MOdel performance.
+  
+    
+    predict_rf_ROC <- Predictions_rf
+    pred_rf <- prediction(as.numeric(predict_rf_ROC), testData$Attrition)
+      perf_rf <- performance(pred_rf, "tpr", "fpr")
+
+      auc_rf <- performance(pred_rf,"auc")
+  auc_rf <- round(as.numeric(auc_rf@y.values), 2)
+  
+   
+    predict_svm_ROC <- Predictions_svm
+    pred_svm <- prediction(as.numeric(predict_svm_ROC), testData$Attrition)
+      perf_svm <- performance(pred_svm, "tpr", "fpr")
+
+      auc_svm <- performance(pred_svm,"auc")
+  auc_svm <- round(as.numeric(auc_svm@y.values), 2)
+  
+   
+    predict_glm_ROC <- Predictions_glm
+    pred_glm <- prediction(as.numeric(predict_glm_ROC), testData$Attrition)
+      perf_glm <- performance(pred_glm, "tpr", "fpr")
+
+      auc_glm <- performance(pred_glm,"auc")
+  auc_glm <- round(as.numeric(auc_glm@y.values), 2)
+  
+  
+   
+    predict_lda_ROC <- Predictions_lda
+    pred_lda <- prediction(as.numeric(predict_lda_ROC), testData$Attrition)
+      perf_lda <- performance(pred_lda, "tpr", "fpr")
+
+      auc_lda <- performance(pred_lda,"auc")
+  auc_lda <- round(as.numeric(auc_lda@y.values), 2)
+  
+  
+  
+  predict_xgb_ROC <- Predictions_xgb
+    pred_xgb <- prediction(as.numeric(predict_xgb_ROC), testData$Attrition)
+      perf_xgb <- performance(pred_xgb, "tpr", "fpr")
+
+      auc_xgb <- performance(pred_xgb,"auc")
+  auc_xgb <- round(as.numeric(auc_xgb@y.values), 2)
+  
+    table_glm <- getPerformanceTable("Logistic regression", cm_glm)
+    table_svm <- getPerformanceTable("Support vector machine", cm_svm)
+  table_lda <- getPerformanceTable("Linear Discriminant analysis", cm_lda)
+  table_rf <- getPerformanceTable("Random Forest", cm_rf)
+  table_xgb <- getPerformanceTable("Extreme gradient boost", cm_xgb)
+  
+  
+  
+  # accuracy
+  output$accuracy <- renderTable({
+    auc <- rbind(auc_glm, auc_lda, auc_rf, auc_svm, auc_xgb)
+    accuracy <- rbind(table_glm, table_lda, table_rf, table_svm, table_xgb)
+    cbind(accuracy, "AUC"=auc)
+  })
+  
+  # roc curve
+  output$roc_curve <- renderPlot({
+    plot(perf_glm, main = "ROC Curve for the Models", col='blue')
+    plot(perf_svm,add=TRUE, col='red')
+    plot(perf_lda, add=TRUE, col='green3')
+    plot(perf_rf, add=TRUE, col='darkmagenta')
+        plot(perf_xgb, add=TRUE, col='orange')
+
+    legend('bottom', c("Logistic Regression", "Support Vector machine", 
+                       "Linear discriminant analysis", "Random forest", "Extreme gradeient boost"), 
+           fill = c('blue','red','green3','darkmagenta','orange'), bty='n')
+    
+  })
+  
+  
+    #variable important plot
+      output$model_dt <- renderPlot({
+varImpPlot(rf_varimportance)      
+
+  })
+  
+  }
+  
+  
+  
+shinyApp(ui, server)
+```
+
+#The most important vaare 
