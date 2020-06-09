@@ -1,0 +1,114 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(tidyverse)
+library(caret)
+library(rpart)
+library(knitr) #Dynamic Report Generator including use of LateX, HTML
+library(gridExtra)
+library(corrplot)
+library(Boruta) #Feature selection
+library(randomForest) #Random forest
+library(ggRandomForests) #variable importance random forest
+library(DMwR) #BINARY CLASSIFICATION
+library(pROC) #ROC PLOT
+library(shinydashboard)
+library(shiny)
+library(readxl)
+library(plotly)
+library(ROCR)
+library(xgboost)
+```
+ 
+
+```{r}
+load("model.RData")
+load("file.RData")
+```
+
+
+
+
+```{r}
+set.seed(1337)
+Predictions_rf <- predict(model_rf, smote_test)
+confusionMatrix(Predictions_rf, smote_test$Attrition)
+```
+
+
+```{r}
+set.seed(1337)
+Predictions_glm <- predict(model_glm, smote_test)
+
+confusionMatrix(Predictions_glm, smote_test$Attrition)
+```
+
+```{r}
+set.seed(1337)
+Predictions_svm <- predict(model_svm,smote_test)
+
+confusionMatrix(Predictions_svm, smote_test$Attrition)
+```
+
+```{r}
+Predictions_xgb <- predict(model_xgb, smote_test)
+
+confusionMatrix(Predictions_xgb, smote_test$Attrition)
+```
+
+```{r}
+set.seed(1337)
+Predictions_lda <- predict(model_lda,smote_test)
+
+confusionMatrix(Predictions_lda, smote_test$Attrition)
+```
+
+
+
+
+```{r}
+
+roc_rf <- roc(as.numeric(smote_test$Attrition), as.numeric(Predictions_rf))
+roc_rf$auc
+
+roc_svm <- roc(as.numeric(smote_test$Attrition), as.numeric(Predictions_svm))
+roc_svm$auc
+
+roc_xgb <- roc(as.numeric(smote_test$Attrition), as.numeric(Predictions_xgb))
+roc_xgb$auc
+
+roc_lda <- roc(as.numeric(smote_test$Attrition), as.numeric(Predictions_lda))
+roc_lda$auc
+
+roc_glm <- roc(as.numeric(smote_test$Attrition), as.numeric(Predictions_glm))
+roc_glm$auc
+
+
+
+
+```
+```{r}
+plot(roc_rf, ylim = c(0,1), main = "ROC curves", col = "blue")
+plot(roc_glm, ylim = c(0,1),  col = "green", add = T)
+plot(roc_lda, ylim = c(0,1),   col = "yellow", add = T)
+plot(roc_svm, ylim = c(0,1),   col = "burlywood", add = T)
+plot(roc_xgb, ylim = c(0,1),  col = "purple", add = T)
+
+
+
+
+
+
+```
+
+
+
+```{r}
+ggplot(smote_train,aes(Yearswithoutchange,fill=Attrition)) +
+  geom_density(alpha=0.5) 
+
+```
+```
+

@@ -1,0 +1,583 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(caret)
+library(rpart)
+library(knitr) #Dynamic Report Generator including use of LateX, HTML
+library(gridExtra)
+library(corrplot)
+library(Boruta) #Feature selection
+library(randomForest) #Random forest
+library(ggRandomForests) #variable importance random forest
+library(DMwR) #BINARY CLASSIFICATION
+library(pROC) #ROC PLOT
+library(shinydashboard)
+library(shiny)
+library(readxl)
+library(plotly)
+library(ROCR)
+library(xgboost)
+```
+```{r}
+load("model.RData")
+load("file.RData")
+```
+
+
+
+
+
+```{r}
+
+getPerformanceTable <- function(model, matrix) {
+  sensitivity <- round(matrix[4] / (matrix[4] + matrix[2]), digits = 1)
+  specificity <- round(matrix[1] / (matrix[3] + matrix[1]), digits = 1)
+  precision <- round(matrix[4] / (matrix[4] + matrix[3]), digits = 1)
+  #f1 <- round(2*precision*sensitivity / (precision+sensitivity), digits = 2)
+  recall <- sensitivity
+  performanceTable <- data.frame(Model = model, Sensitivity = sensitivity, Specificity = specificity, Precision = precision, recall = recall)
+#performanceTable <- data.frame(Model = model, Sensitivity = sensitivity, Specificity = specificity, 
+                       # Precision = precision, Recall = recall, F1 = f1)
+  return(performanceTable)
+}
+```
+
+
+
+
+
+
+
+
+## ui  
+`
+
+```{r}
+## ui  
+ui <- dashboardPage(
+  skin = "blue", 
+  # Header content
+  dashboardHeader(title = "Human Resources Analytics", titleWidth = 300),
+  
+  
+  # Sidebar content
+  dashboardSidebar(
+    sidebarMenu(
+      menuItem("About Project", tabName = "about", icon = icon("user")),
+      menuItem("Data Information", tabName = "info", icon = icon("info-circle")),
+      
+      menuItem("Exploratory Data Analysis", tabName = "plot", icon = icon("bar-chart"), startExpanded = TRUE, 
+         menuSubItem("Exploratory Data Analysis(1)", tabName = "plot1"), menuSubItem("Exploratory Data Analysis(2)", tabName = "plot2"), menuSubItem("Exploratory Data Analysis(3)", tabName = "plot3")),
+      
+      menuItem("Model Prediction", tabName = "model", icon = icon("check")),
+
+      menuItem("Findings", tabName = "finding", icon = icon("check"))
+
+      
+      #menuItem(" Reference Source Code", href = #"https://github.com/tammykan/Human-Resources-Analytics", icon = icon("code"))
+    )
+  ),
+  
+  # Body content
+  dashboardBody(
+    # Load D3.js
+    tags$head(tags$script(src = 'http://d3js.org/d3.v3.min.js')),
+    
+    tabItems(
+      # about tab content
+      tabItem(tabName = "about",
+              h1("Human Resources Analytics"),
+              p("Foudations of Informatics for Practice"),
+              img(src="http://www.thecareermuse.co.in/wp-content/uploads/2017/09/Human-Resource-Planning-560x315.jpg", width = "100%", height = "50%"),
+              br(),
+              h2("Introduction and Significance of project"),
+              h4("Human Resources Analytics is an interesting dataset to explore. 
+                 Our goal is trying to understand why our best and most experienced employees are leaving the company prematurely., the projet will help to increase the effectiveness of human resource processes especially related to employee recruitment, and turnover. It will help the human resource team to forecast factors that might lead to employee attrition and plan ahead on filling these open positions. It will also help to identify the the factors that keep employees happy being in the organization as well as the reasons for employee attrition and the identification of employees at risk of leaving.
+Losing a key employee could hamper teams dynamics and finding the right employee could be costly and cumbersome"),
+h3("The idea behind this project is to examine the different factos that lead to attrition and come up with a model with a certain degree of accuracy that predicts if an employee is going to leave the company and the factors that are most reponsible for employee attrition")
+              
+             
+      ),
+      
+      # information tab content
+      tabItem(tabName = "info",
+              # information
+              fluidRow(
+                h1("Data Dictionary"),
+                box(
+                  title = "Variables Information", status = "success", width = 12, 
+                  solidHeader = TRUE, collapsible = TRUE, 
+                  tableOutput("summary")
+                ),
+                box(
+                  title = "Employee Information", status = "success", width = 12, 
+                  solidHeader = TRUE, collapsible = TRUE, 
+                  h5(paste("The Total Number of employee: ", nrow(hr_data))),
+                  h5(paste("The Number of employee who left the company: ", Attrition_ppl)),
+                  h5(paste("The Number of employee who didn't leave the company: ", no_Attrition)),
+                  h5(paste("The percentage of of employees who left: ", round((Attrition_ppl/nrow(hr_data)*100), digits = 1)) )
+                ),
+                box(
+                  title = "Correlation Plot", status = "success", width = 12, 
+                  solidHeader = TRUE, collapsible = TRUE, 
+                  plotOutput("corrplot")
+                )
+              )
+      ),
+      
+      # plot tab content
+      tabItem(tabName = "plot1", h2("Bar charts and histograms"),
+              # plot
+              fluidRow(
+                column(width = 4, plotlyOutput("plot1"), plotlyOutput("plot2"), plotlyOutput("plot3")),
+                column(width = 4, plotlyOutput("plot4"), plotlyOutput("plot5"), plotlyOutput("plot6")),
+                column(width = 4, plotlyOutput("plot7"), plotlyOutput("plot8"), plotlyOutput("plot9"))
+                
+              )
+      ),
+      
+      tabItem(tabName = "plot2", h2("Box plot and Scatter Plots"),
+              # plot
+              fluidRow(
+                column(width = 10, plotlyOutput("plot10"), plotlyOutput("plot11"), plotlyOutput("plot12")),
+                column(width = 10, plotlyOutput("plot13"), plotlyOutput("plot14"), plotlyOutput("plot15")),
+                column(width = 10,  plotlyOutput("plot16"), plotlyOutput("plot17"), plotlyOutput("plot18"))
+              )
+      ),
+      
+      tabItem(tabName = "plot3", h2("Categorical variables"),
+              # plot
+              fluidRow(
+               
+                column(width = 6, plotOutput("com1"), plotOutput("com2"), plotOutput("com3")),
+                column(width = 6, plotOutput("com4"), plotOutput("com5"), plotOutput("com6")),
+              column(width = 6, plotOutput("com7"),plotOutput("com8"),plotOutput("com9")),
+  column(width = 6, plotOutput("com10"),plotOutput("com11"),plotOutput("com12"),plotOutput("com13"))
+       )         
+              
+      ),
+      
+      # model tab content
+      tabItem(tabName = "model",
+              fluidRow(
+                box(
+                  width = 12, title = "Model variable importance", 
+                  plotOutput("model_dt")
+                ),
+                
+                tabBox(
+                  title = "Model Prediction", width = 12, side = "right",  
+               
+                  id = "tabset", height = "250px",
+                  tabPanel("Logistic Regression", tableOutput("prediction_glm"), textOutput("mean_glm")),
+                  tabPanel("Extreme Gradient Boost", tableOutput("prediction_xgb"), textOutput("mean_xgb")),
+                   tabPanel("Extreme Gradient Boost tuned", tableOutput("prediction_xgb1"), textOutput("mean_xgb1")),
+                  tabPanel("Random Forest", tableOutput("prediction_rf"), textOutput("mean_rf")),
+                  tabPanel("Suport vector machine", tableOutput("prediction_svm"), textOutput("mean_svm")),
+                    tabPanel("Linear Discriminant Model", tableOutput("prediction_lda"), textOutput("mean_lda"))
+
+                ),
+                
+                box(
+                  title = "Model Performance", status = "primary", width = 12,
+                  tableOutput("accuracy")
+                ),
+                
+                box(
+                  title = "ROC Curve", status = "primary", width = 12,
+                  plotOutput("roc_curve")
+                )
+              )
+         ),
+  
+  # FINDING TAB CONTENT
+tabItem(tabName = "finding", h2("Findings from the model prediction"),
+              # plot
+              fluidRow(
+                column(width = 10, plotlyOutput("find1"), plotlyOutput("find2"), plotlyOutput("find3")),
+                column(width = 10, plotlyOutput("find4"), plotlyOutput("find5"), plotlyOutput("fin6"))
+               
+              )
+      )
+  
+  
+  
+  
+    )
+  )
+)
+
+
+  
+```
+
+```{r}
+
+```
+
+
+```{r}
+## server
+server <- function(input, output, session) {
+  
+  #Table information
+  output$summary <- renderTable(
+    {
+      str1 = "Age of employee."
+    str2 = ""
+    str3 = ""
+    str4 = ""
+    str5 = ""
+    str6 = ""
+    str7 = ""
+    str8 = ""
+    str9 = ""
+    str10 = ""
+    
+    name = c("Age","Department", "Hourly Rate", 
+             "Job satisfaction", "Num of companies worked", "Performance rating", 
+             "Total working years", "Years in current role", "Daily rate", "Job role","Stockoption level","Attrition","Distance from Home", " JOb Involvement", " Marital Status", "Relationship satisfaction", " Training times least year", " YEars since last promorion", " Education field", " Monthly rate", "Years at company", "Business travel", " Education", "Environment satisfaction", " JOb Level", " Monthly income", " Over time", " Work life balance", " Years with current manager", " Gender", "Percentage Hike", " Employee Count", " Standard Hours","Employeenumber", "Over 18")
+    description = c(str1, str2, str3, str4, str5, str6, str7, str8, str9, str10)
+    table <- cbind("Variable Name"=name)
+    }
+  )
+  
+#Plots
+  output$plot1 <- renderPlotly({
+    ggplot(hr_data, aes(Attrition)) + geom_bar(stat = "count") + ggtitle("Attrition rate")
+    
+  }
+  )
+   
+  
+   output$plot2 <- renderPlotly({
+     ggplot(hr_data, aes(Attrition, group=Department)) +
+  geom_bar(aes(y = ..prop.., fill= factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_grid(~Department) + ggtitle("Attrition by deparment")
+   }
+  )
+  
+      output$plot3 <- renderPlotly({
+        ggplot(hr_data, aes(BusinessTravel, fill = Attrition)) + geom_bar(stat= "count", position =  position_dodge()) + ggtitle("Attrition by business travel")
+})
+
+
+            output$plot4 <- renderPlotly({
+              ggplot(hr_data, aes(Gender, group= Attrition)) +
+  geom_bar(aes(y = ..prop.., fill= factor(..x..)), stat = "count") +
+  labs(y="Percentage", fill = "Gender") +
+  facet_grid(~Attrition) + ggtitle("Attrition by gender")
+})
+         
+              output$plot5 <- renderPlotly({
+              ggplot(hr_data, aes(Age, fill = Gender)) + 
+  geom_histogram(binwidth = 5) +
+  facet_grid(~Attrition) + ggtitle("Attrition by age")
+                })
+
+             output$plot6 <- renderPlotly({
+               ggplot(hr_data,aes(DistancefromHome,fill=Attrition)) +
+  geom_density(alpha=0.5)
+})
+            output$plot7 <- renderPlotly({
+              ggplot(hr_data,aes(Education, fill = Attrition)) +geom_bar() + facet_grid(~educationfield) 
+
+})
+             
+    
+             
+    output$plot10 <- renderPlotly({
+   ggplot(hr_data,aes(Attrition,DailyRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+      
+    })
+   
+       output$plot11 <- renderPlotly({
+         ggplot(hr_data,aes(Attrition,MonthlyRate, fill = Attrition)) + geom_boxplot() + coord_flip()
+})
+     output$plot12 <- renderPlotly({
+      ggplot(hr_data,aes(Attrition,MonthlyIncome, fill = Attrition)) + geom_boxplot() + coord_flip()
+
+})
+
+ h2("Job role and attrition")
+   output$plot13 <- renderPlotly({
+ggplot(hr_data, aes(JobRole,MonthlyIncome, fill= Attrition)) + geom_boxplot() + 
+  coord_flip()
+   })
+
+      output$plot14 <- renderPlotly({
+        ggplot(hr_data,aes(Yearsatcompany,salaryhike,col=(Attrition),size = salaryhike)) +geom_point(alpha = 0.5)
+
+})
+  output$com1 <- renderPlot({
+    ggplot(hr_data,aes(x=jobsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+    
+})
+  
+        output$com2 <- renderPlot({
+          ggplot(hr_data,aes(x=jobinvolvement,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+})
+          output$com3 <- renderPlot({
+                ggplot(hr_data,aes(x=relationshipsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..)),position = position_dodge()) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)  
+                })
+
+                  output$com4 <- renderPlot({
+                    ggplot(hr_data,aes(x=performancerating,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+                  })
+                  
+            output$com5 <- renderPlot({
+              ggplot(hr_data,aes(x=environmentsatisfaction,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+            })
+            output$com6 <- renderPlot({
+              
+             ggplot(hr_data,aes(x=overtime,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition) 
+            })
+            
+            output$com7 <- renderPlot({
+  ggplot(hr_data,aes(x=worklifebalance,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+            })
+            
+           output$com9 <- renderPlot({
+             ggplot(hr_data,aes(x=AgeGroup,group=Attrition))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Attrition") +
+  facet_wrap(~Attrition)
+             
+})
+             output$com10 <- renderPlot({
+             ggplot(hr_data,aes(x=Attrition,group=jobclass))+
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage", fill = "Job Class") +
+  facet_wrap(~jobclass)
+})
+              output$com11 <- renderPlot({
+             ggplot(hr_data, aes(jobclass, fill = jobsatisfaction)) + geom_bar(stat= "count", position =  position_dodge()) + facet_wrap(~Attrition) 
+})
+               output$com12 <- renderPlot({
+             ggplot(hr_data, aes(jobclass, fill = jobinvolvement)) + geom_bar(stat= "count", position =  position_dodge()) + facet_wrap(~Attrition) 
+
+})
+                output$com13 <- renderPlot({
+             ggplot(hr_data, aes(jobclass, fill = jobsatisfaction)) + geom_bar(stat= "count", position =  position_dodge()) + facet_wrap(~Attrition) 
+})
+                 
+      
+   #correlation plot  
+  output$corrplot <- renderPlot({
+    corrplot(cor(data_corr), method = "circle")
+
+  })
+  
+  
+  
+  #Implication and finding plots
+  output$find1 <- renderPlotly({
+    ggplot(smote_train,aes(DistancefromHome,fill=Attrition)) +
+  geom_density(alpha=0.5) 
+  })
+  
+ 
+    output$find2 <- renderPlotly({
+  
+ggplot(smote_train,aes(x=JobRole,group=Attrition)) +
+  geom_bar(stat="count",aes(y=..prop..,fill=factor(..x..))) +
+  labs(y="Percentage") + 
+        coord_flip()
+  
+
+    })
+    
+    
+     output$find3 <- renderPlotly({
+ggplot(smote_train, aes(overtime, fill = Attrition)) + geom_bar(stat= "count", position =  position_dodge()) 
+    })
+    
+     
+      output$find4 <- renderPlotly({
+
+ggplot(smote_train,aes(MonthlyIncome,fill=Attrition)) +
+  geom_density(alpha=0.5)
+    })
+    
+      
+       output$find5 <- renderPlotly({
+ggplot(smote_train,aes(OverallSatisfaction,fill=Attrition)) +
+  geom_density(alpha=0.5)
+    })
+  #random forest
+  set.seed(1337)
+   #model_rf <- randomForest(as.factor(Attrition) ~., data = smote_trainrem, nsize = 20, ntree = 200)
+  #prediction_rf <- predict(model_rf, smote_test)
+  #cm_rf <- table(Truth = smote_test$Attrition, Pred = prediction_rf)
+  #table_rf <- getPerformanceTable("Random Forest", cm_rf)
+  
+  cm_rf <- table(Truth = smote_test$Attrition, Prediction = Predictions_rf)
+  
+  
+  output$prediction_rf <- renderTable({ cm_rf })
+  output$mean_rf <- renderText({ paste("Accuracy: ", round(mean(Predictions_rf == smote_test$Attrition), digits = 3)) })
+  
+  #logistic regressision
+  
+  cm_glm <- table(Truth = smote_test$Attrition, Prediction = Predictions_glm)
+  
+  
+  output$prediction_glm <- renderTable({ cm_glm })
+  output$mean_glm <- renderText({ paste("Accuracy: ", round(mean(Predictions_glm == smote_test$Attrition), digits = 3)) })
+  
+  #Extreme gradient boost
+  cm_xgb <- table(Truth = smote_test$Attrition, Prediction = Predictions_xgb)
+  
+  
+  output$prediction_xgb <- renderTable({ cm_xgb })
+  output$mean_xgb <- renderText({ paste("Accuracy: ", round(mean(Predictions_xgb == smote_test$Attrition), digits = 3)) })
+  
+   #Extreme gradient boost tuned
+  cm_xgb1 <- table(Truth = smote_test$Attrition, Prediction = Predictions_xgb1)
+  
+  
+  output$prediction_xgb1 <- renderTable({ cm_xgb1 })
+  output$mean_xgb1 <- renderText({ paste("Accuracy: ", round(mean(Predictions_xgb1 == smote_test$Attrition), digits = 3)) })
+  
+  #Support vector machine
+  
+  cm_svm <- table(Truth = smote_test$Attrition, Prediction = Predictions_svm)
+  
+  
+  output$prediction_svm <- renderTable({ cm_svm })
+  output$mean_svm <- renderText({ paste("Accuracy: ", round(mean(Predictions_svm == smote_test$Attrition), digits = 3)) })
+  
+  
+  #Linear discriminant model 
+  
+  cm_lda <- table(Truth = smote_test$Attrition, Prediction = Predictions_lda)
+  
+  
+  output$prediction_lda <- renderTable({ cm_lda })
+  output$mean_lda <- renderText({ paste("Accuracy: ", round(mean(Predictions_lda == smote_test$Attrition), digits = 3)) })
+
+  
+  #MOdel performance.
+  
+    
+    predict_rf_ROC <- Predictions_rf
+    pred_rf <- prediction(as.numeric(predict_rf_ROC), smote_test$Attrition)
+      perf_rf <- performance(pred_rf, "tpr", "fpr")
+
+      auc_rf <- performance(pred_rf,"auc")
+  auc_rf <- round(as.numeric(auc_rf@y.values), 2)
+  
+   
+    predict_svm_ROC <- Predictions_svm
+    pred_svm <- prediction(as.numeric(predict_svm_ROC), smote_test$Attrition)
+      perf_svm <- performance(pred_svm, "tpr", "fpr")
+
+      auc_svm <- performance(pred_svm,"auc")
+  auc_svm <- round(as.numeric(auc_svm@y.values), 2)
+  
+   
+    predict_glm_ROC <- Predictions_glm
+    pred_glm <- prediction(as.numeric(predict_glm_ROC), smote_test$Attrition)
+      perf_glm <- performance(pred_glm, "tpr", "fpr")
+
+      auc_glm <- performance(pred_glm,"auc")
+  auc_glm <- round(as.numeric(auc_glm@y.values), 2)
+  
+  
+   
+    predict_lda_ROC <- Predictions_lda
+    pred_lda <- prediction(as.numeric(predict_lda_ROC), smote_test$Attrition)
+      perf_lda <- performance(pred_lda, "tpr", "fpr")
+
+      auc_lda <- performance(pred_lda,"auc")
+  auc_lda <- round(as.numeric(auc_lda@y.values), 2)
+  
+  
+  
+  predict_xgb_ROC <- Predictions_xgb
+    pred_xgb <- prediction(as.numeric(predict_xgb_ROC), smote_test$Attrition)
+      perf_xgb <- performance(pred_xgb, "tpr", "fpr")
+
+      auc_xgb <- performance(pred_xgb,"auc")
+  auc_xgb <- round(as.numeric(auc_xgb@y.values), 2)
+  
+  
+  predict_xgb1_ROC <- Predictions_xgb1
+    pred_xgb1 <- prediction(as.numeric(predict_xgb1_ROC), smote_test$Attrition)
+      perf_xgb1 <- performance(pred_xgb1, "tpr", "fpr")
+
+      auc_xgb1 <- performance(pred_xgb1,"auc")
+  auc_xgb1 <- round(as.numeric(auc_xgb1@y.values), 2)
+  
+    table_glm <- getPerformanceTable("Logistic regression", cm_glm)
+    table_svm <- getPerformanceTable("Support vector machine", cm_svm)
+  table_lda <- getPerformanceTable("Linear Discriminant analysis", cm_lda)
+  table_rf <- getPerformanceTable("Random Forest", cm_rf)
+  table_xgb <- getPerformanceTable("Extreme gradient boost", cm_xgb)
+    table_xgb1 <- getPerformanceTable("Extreme gradient boost tuned", cm_xgb1)
+
+  
+  
+  # accuracy
+  output$accuracy <- renderTable({
+    auc <- rbind(auc_glm, auc_lda, auc_rf, auc_svm, auc_xgb,auc_xgb1)
+    accuracy <- rbind(table_glm, table_lda, table_rf, table_svm, table_xgb, table_xgb1)
+    cbind(accuracy, "AUC"=auc)
+  })
+  
+  # roc curve
+  output$roc_curve <- renderPlot({
+    plot(perf_glm, main = "ROC Curve for the Models", col='blue')
+    plot(perf_svm,add=TRUE, col='red')
+    plot(perf_lda, add=TRUE, col='green3')
+    plot(perf_rf, add=TRUE, col='darkmagenta')
+        plot(perf_xgb, add=TRUE, col='orange')
+
+    legend('bottom', c("Logistic Regression", "Support Vector machine", 
+                       "Linear discriminant analysis", "Random forest", "Extreme gradeient boost"), 
+           fill = c('blue','red','green3','darkmagenta','orange'), bty='n')
+    
+  })
+  
+  
+    #variable important plot
+      output$model_dt <- renderPlot({
+varImpPlot(rf_varimportance)      
+
+        
+  })
+  
+      
+  }
+  
+  
+  
+shinyApp(ui, server)
+```
