@@ -10,13 +10,13 @@ Loss of customer relationships
 
 “You take away our top 20 employees and we become a mediocre company” – Bill Gates
 
-#Problem Statement
+# Problem Statement
 Identifies factors that leads to employee attrition
 Modelling using different machine learning algorithms that can be used to predict employee attrition
 Best predictive analytics(accuracy) of employee attrition 
 Identify most important features that are responsible for employee attrition
 
-#Data Summary
+# Data Summary
 HR Dataset by IBM 
 Simulated HR Database
 Representative of real world data
